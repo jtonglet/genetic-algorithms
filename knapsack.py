@@ -249,7 +249,7 @@ if __name__=='__main__':
     print(kp.capacity)
     print('    ')
     print('    ')
-    solution = ev.fit(kp)
+    solution = ev.optimize(kp)
     print(solution.get_items_in_knapsack())
     print('EA solution : %s'%solution.compute_fitness())
     print('    ')
