@@ -4,7 +4,7 @@ A basic genetic algorithm for solving the binary KnapSack Problem
 
 import numpy as np
 import random
-
+#from recombination import CrossOverMethodX
 
 class KnapSack:
     '''
@@ -239,7 +239,7 @@ def heuristic(problem=KnapSack()):
 
 if __name__=='__main__':
     kp = KnapSack(n_items=100,capacity=50)
-    ev = evolutionaryAlgorithm(population_size=400,n_offsprings=200)
+    ev = evolutionaryAlgorithm(population_size=500,n_offsprings=250)
     print('Problem Parameters')
     print('---- Value -----')
     print(kp.value)
@@ -249,7 +249,7 @@ if __name__=='__main__':
     print(kp.capacity)
     print('    ')
     print('    ')
-    solution = ev.optimize(kp)
+    solution = ev.optimize(kp,iterations=20)
     print(solution.get_items_in_knapsack())
     print('EA solution : %s'%solution.compute_fitness())
     print('    ')
