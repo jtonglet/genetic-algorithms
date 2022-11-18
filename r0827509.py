@@ -4,11 +4,10 @@ import random
 import math
 import mutation
 import selection
-import PMX_recombination
 import order_crossover
-import CX2_crossover
 import time
 import matplotlib.pyplot as plt
+from numba import jit
 
 
 
@@ -26,9 +25,7 @@ class Parameters:
         self.upper_bound = upper_bound
 
 
-
-# Modify the class name to match your student number.
-class r0123456:
+class r0827509:
 
     def __init__(self):
         self.reporter = Reporter.Reporter(self.__class__.__name__)
@@ -72,17 +69,12 @@ class r0123456:
                 for _ in range(1, parameters.mu): #Offsprings for this iteration
                     p_1 = selection.selection(population, parameters.k)
                     p_2 = selection.selection(population, parameters.k)
-                    #print(p_1.order)
-                    #print(p_2.order)
-                    #child = CandidateSolution(tsp,alfa=0.1, order=PMX_recombination.PMX_recombination(p_1.order, p_2.order))
                     child = CandidateSolution(tsp,standard_alfa=0.1, order=order_crossover.OrderCrossover(p_1.order, p_2.order))
                     child.computeFitness()
                     mutated = mutation.inversion_mutate(child)
-                    # print(mutated.fitness)
-
+                    LSO(mutated)
                     offspring.append(mutated)
-                    #print(mutated.order)
-                    #print('')
+
                     if np.array_equal(p_1.order,p_2.order) and np.array_equal(p_1.order,child.order):
                         no_diff += 1
                 # print('no difference between parents and child', no_diff)
@@ -91,7 +83,9 @@ class r0123456:
                 #Mutation of seed population
                 mutated_population = list()
                 for ind in population:
-                    mutated_population.append(mutation.inversion_mutate(ind))
+                    mut = mutation.inversion_mutate(ind)
+                    LSO(mut,tsp)
+                    mutated_population.append(mut)
                 population = mutated_population
 
 
@@ -113,9 +107,8 @@ class r0123456:
                     print('algorithm stopped because each individual in the population was the same')
                     return bestObjective
 
-                # print(i, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
+                print(i, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
 
-                # Your code here.
 
                 # Call the reporter with:
                 #  - the mean objective function value of the population
@@ -142,20 +135,8 @@ class r0123456:
             #Either the max num of iterations is reached or the time left is up
             yourConvergenceTestsHere = False
 
-        # fig = plt.figure(1, dpi=300)
-        # plt.title('Convergence graph')
-        # plt.xlabel('Time (s)')
-        # plt.ylabel('Fitness')
-        # plt.plot(g_time[10:], g_mean[10:], label="Mean fitness")
-        # plt.plot(g_time, g_best, label="Best fitness")
-        # plt.legend(loc="upper right")   
-        # plt.tight_layout()
-        # plt.show()
-
         # Your code here.
         return finalFitness
-
-
 
 
 
@@ -173,7 +154,7 @@ class TravellingSalesmanProblem:
 
 
 class CandidateSolution:
-    def __init__(self, travelling_salesman_problem, standard_alfa, order=None):
+    def __init__(self, travelling_salesman_problem, standard_alfa=0.1, order=None):
         self.alfa = max(0.01, standard_alfa + 0.02 * np.random.normal())
         self.tsp = travelling_salesman_problem
         if order is None:
@@ -208,9 +189,7 @@ class CandidateSolution:
         if math.isinf(distance):
             #Convert infinite to a very large negative number 
             distance =  1e10
-        self.fitness = -distance  - (penalty * 5e3)
-
-
+        self.fitness = -distance  - (penalty * 1e3)
 
 
 """ Randomly initialize the population """
@@ -252,8 +231,9 @@ def heur_initialize(tsp, lamda,upper_bound=0.8): #0.8
 
         order = np.array(order)
 
-        indiv = CandidateSolution(tsp, 0.1, order)
+        indiv = CandidateSolution(tsp, 0.1, order) #0.1
         indiv.computeFitness()
+        # LSO(indiv,tsp)
 
         population.append(indiv)
     return population
@@ -263,19 +243,31 @@ def mean(list):
     # TODO - should return mean, not average
     return sum(list)/len(list)
 
+@jit
+def LSO(indiv,problem):
+    # 2-opt local search
+    bestIndividual = indiv
+
+    for i in range(0,len(indiv.order)-2):
+        #Insert loop into the first position
+        # print(indiv_copy.order)
+        indiv_copy = CandidateSolution(problem,order=indiv.order)
+        indiv_copy.order[i], indiv_copy.order[i+1] = indiv.order[i+1], indiv_copy.order[i]
+        # indiv_copy.order[1:i+1] = indiv.order[0:i]
+        # indiv_copy.order[i+1:] = indiv.order[i+1:]
+        #Instead of creating copies, only create it if the changes in the 3 arcs results in a cost reduction !!
+        #That's why we need to use the distance matrix, to not compute the full cost each time
+        indiv_copy.computeFitness()
+        if indiv_copy.fitness > bestIndividual.fitness:
+            bestIndividual = indiv_copy
+
+    indiv.order = bestIndividual.order
+    indiv.computeFitness()
 
 
-# file = open('tour50.csv')
-# distanceMatrix = np.loadtxt(file, delimiter=",")
-# # file.close()
-# tsp = TravellingSalesmanProblem(distanceMatrix)
-# indiv = CandidateSolution(tsp)
-# indiv.computeFitness()
-# print(indiv.fitness)
 
 
 #HRM mut, l 200, k 2n its 2000 and greedy --> 300k on 500t
-# parameters = Parameters(lamda=2000, mu=400, k=10, its=500,upper_bound=0.8 )
-# reporter = r0123456()
-# reporter.optimize('tour250.csv',parameters)
-# # a = CandidateSolution(tsp)
+parameters = Parameters(lamda=100, mu=100, k=2, its=5000,upper_bound=0.8 )
+reporter = r0827509()
+reporter.optimize('tour250.csv',parameters)
