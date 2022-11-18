@@ -78,7 +78,7 @@ until a<b
 def permute(individual, a, b):
     subset = individual.order[a:b]
     subset=np.flip(subset).astype('int')
-    individual.order = np.append(individual.order[:smallest_index], np.append(subset,individual.order[biggest_index:])) 
+    individual.order = np.append(individual.order[:a], np.append(subset,individual.order[b:])) 
 
     return individual
 

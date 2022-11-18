@@ -1,10 +1,12 @@
 '''
 A basic genetic algorithm for solving the binary KnapSack Problem
 '''
-
+from numba import jit
 import numpy as np
 import random
 #from recombination import CrossOverMethodX
+
+
 
 class KnapSack:
     '''
@@ -19,10 +21,12 @@ class KnapSack:
 
     def __init__(self,
                  n_items=5,
-                 capacity=20):
+                 capacity=20,
+                 seed=123):
+        rng = np.random.RandomState(seed)
         self.n_items = n_items
-        self.value = np.random.randint(low=1,high=10,size=n_items)
-        self.weight = np.random.randint(low=1,high=capacity,size=n_items)
+        self.value = rng.randint(low=1,high=10,size=n_items)
+        self.weight = rng.randint(low=1,high=capacity,size=n_items)
         self.capacity = capacity  
 
 
@@ -45,7 +49,8 @@ class Individual:
         self.alpha = alpha  #Mutation rate
         self.order = order
         #No order predefined
-        if not self.order:
+        if self.order is None:
+            #This needs to be truly random, no seed
             self.order = np.random.permutation(np.arange(self.problem.n_items))
     
     def compute_fitness(self):
@@ -159,6 +164,7 @@ class evolutionaryAlgorithm:
         Select one individual within the population with K-tournament.
         '''
 
+        #Also needs to be truly random
         sample = np.random.choice(population,size=K)
         idx = np.array([x.compute_fitness() for x in sample]).argmax()
         #Keep the individual with the best fitness in the sample 
@@ -181,6 +187,31 @@ class evolutionaryAlgorithm:
         new_pop = [population[i] for i in new_pop_idx]
 
         return new_pop
+    
+    def LSO(self,
+            indiv,
+            problem):
+        '''
+        Local Search Operator.  
+        '''
+        bestFitness = indiv.compute_fitness()
+        bestIndividual = indiv
+
+        for i in range(1,len(indiv.order)):
+            indiv_copy = Individual(problem,order=indiv.order)
+            #Insert loop into the first position
+            # print(indiv_copy.order)
+            indiv_copy.order[0] = indiv.order[i]
+            indiv_copy.order[1:i+1] = indiv.order[0:i]
+            indiv_copy.order[i+1:] = indiv.order[i+1:]
+            iterFitness = indiv_copy.compute_fitness()
+            if iterFitness > bestFitness:
+                bestFitness = iterFitness
+                bestIndividual = indiv_copy
+
+        indiv.order = bestIndividual.order
+
+
 
 
     def optimize(self,
@@ -194,6 +225,8 @@ class evolutionaryAlgorithm:
         '''
         #Initialize the population
         population = self.initialize_pop(problem)
+        for indiv in population:
+            self.LSO(indiv,problem)
         #We have to keep track of the best solution uptill now 
         pop_fitness = [i.compute_fitness() for i in population]
         best_individual = population[pop_fitness.index(max(pop_fitness))]
@@ -209,10 +242,12 @@ class evolutionaryAlgorithm:
                 #Mutation of the offsprings
                 for o in offsprings:
                     self.mutation(o)
+                    # self.LSO(o,problem)
             
             #Mutations of the original pop
             for ind in population:
                 self.mutation(ind) 
+                # self.LSO(ind,problem)
             
             #Elimination
             population = self.elimination(population+offsprings,len(population))
@@ -239,7 +274,7 @@ def heuristic(problem=KnapSack()):
 
 if __name__=='__main__':
     kp = KnapSack(n_items=100,capacity=50)
-    ev = evolutionaryAlgorithm(population_size=500,n_offsprings=250)
+    ev = evolutionaryAlgorithm(population_size=200,n_offsprings=200)
     print('Problem Parameters')
     print('---- Value -----')
     print(kp.value)
