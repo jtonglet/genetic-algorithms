@@ -12,11 +12,6 @@ from numba import jit
 
 
 class Parameters:
-    # lamda = population size
-    # mu = offspring size
-    # k = for k-tournament selection
-    # its = number of iterations
-
     def __init__(self, lamda, mu, k, its,upper_bound):
         self.lamda = lamda
         self.its = its
@@ -39,17 +34,17 @@ class r0827509:
         distanceMatrix = np.loadtxt(file, delimiter=",")
         file.close()
         finalFitness = -10000000
-        #print(distanceMatrix)
-        #print('size:', len(distanceMatrix), '-', len(distanceMatrix[0]))
-        #print('distance 0-1', distanceMatrix[0][1])
         tsp = TravellingSalesmanProblem(distanceMatrix)
-        g_best=[]
-        g_mean=[]
-        g_time=[]
+        # g_best=[]
+        # g_mean=[]
+        # g_time=[]
         yourConvergenceTestsHere = True
-        while( yourConvergenceTestsHere):
 
-            #Initialize population
+        while( yourConvergenceTestsHere):
+            ##################
+            # Initialization #
+            ##################
+
             start_time = time.time()
             if heuristic:
                 population = heur_initialize(tsp,parameters.lamda,parameters.upper_bound)
@@ -72,19 +67,15 @@ class r0827509:
                     child = CandidateSolution(tsp,standard_alfa=0.1, order=order_crossover.OrderCrossover(p_1.order, p_2.order))
                     child.computeFitness()
                     mutated = mutation.inversion_mutate(child)
-                    LSO(mutated)
+                    # LSO(mutated)
                     offspring.append(mutated)
-
-                    if np.array_equal(p_1.order,p_2.order) and np.array_equal(p_1.order,child.order):
-                        no_diff += 1
-                # print('no difference between parents and child', no_diff)
 
 
                 #Mutation of seed population
                 mutated_population = list()
                 for ind in population:
                     mut = mutation.inversion_mutate(ind)
-                    LSO(mut,tsp)
+                    # LSO(mut,tsp)
                     mutated_population.append(mut)
                 population = mutated_population
 
@@ -98,14 +89,9 @@ class r0827509:
                 bestSolution = population[0]
                 meanObjective = mean([indiv.fitness for indiv in population])
 
-                g_best.append([abs(int(bestObjective))])
-                g_mean.append([abs(int(meanObjective))])
-                g_time.append([time.time()-start_time])
-
-                if no_diff > 197:
-                    #Stop algorithm and report current best objective
-                    print('algorithm stopped because each individual in the population was the same')
-                    return bestObjective
+                # g_best.append([abs(int(bestObjective))])
+                # g_mean.append([abs(int(meanObjective))])
+                # g_time.append([time.time()-start_time])
 
                 print(i, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
 
@@ -177,7 +163,6 @@ class CandidateSolution:
             if math.isinf(new_dist):
                 penalty += 1
             distance += new_dist
-            # print(distance)
         try:
             last_dist = self.tsp.distance_matrix[self.order[-1]][self.order[0]]
             if math.isinf(last_dist):
@@ -205,7 +190,8 @@ def initialize(tsp, lamda):
 #This part is very slow, takes about 2 minutes just for 250t
 #Ideas : greedy heuristic but on a random sample only, better python structre for the distance matrix
 
-def heur_initialize(tsp, lamda,upper_bound=0.8): #0.8
+@jit
+def heur_initialize(tsp, lamda,upper_bound=0.8):
     print('heuristic initalization')
     population = list()
     distance_matrix_copy = tsp.distance_matrix
@@ -223,9 +209,6 @@ def heur_initialize(tsp, lamda,upper_bound=0.8): #0.8
                 current_city = min(set(range(0,tsp.number_of_cities)) - set(order), key=distance_matrix_copy[current_city].__getitem__)
                 order.append(current_city)
 
-
-
-
         remaining_city = [number for number in range(0,tsp.number_of_cities) if number not in order]
         order.append(remaining_city[0])
 
@@ -233,8 +216,6 @@ def heur_initialize(tsp, lamda,upper_bound=0.8): #0.8
 
         indiv = CandidateSolution(tsp, 0.1, order) #0.1
         indiv.computeFitness()
-        # LSO(indiv,tsp)
-
         population.append(indiv)
     return population
 
@@ -270,4 +251,4 @@ def LSO(indiv,problem):
 #HRM mut, l 200, k 2n its 2000 and greedy --> 300k on 500t
 parameters = Parameters(lamda=100, mu=100, k=2, its=5000,upper_bound=0.8 )
 reporter = r0827509()
-reporter.optimize('tour250.csv',parameters)
+reporter.optimize('tour50.csv',parameters)
