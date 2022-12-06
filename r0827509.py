@@ -8,6 +8,8 @@ import order_crossover
 import time
 # import matplotlib.pyplot as plt
 from numba import jit
+import warnings
+warnings.filterwarnings('ignore')
 
 
 
@@ -82,11 +84,12 @@ class r0827509:
 
                 #Idea : different crossover for each island
                 if i%5==0:
+                    print('LSO round')
                     local_search = True
                 else:
                     local_search = False
                 island1 = self.create_new_generation(tsp,island1,order_crossover.OrderCrossover,selection.lambdamu_elimination,parameters,local_search)
-                island2 = self.create_new_generation(tsp,island2,order_crossover.CycleCrossover,selection.lambdamu_elimination,parameters,local_search)
+                island2 = self.create_new_generation(tsp,island2,order_crossover.OrderCrossover,selection.lambdamu_elimination,parameters,local_search)
                 population = island1 + island2
                 # Evaluate fitness and reporting
                 #The best objective and best solutions are at the front of the population after the elimination
@@ -148,8 +151,8 @@ class r0827509:
             child = CandidateSolution(tsp,standard_alfa=parameters.standard_alfa, order=crossover(p_1.order, p_2.order))
             child.computeFitness()
             mut = mutation.inversion_mutate(child)
-            if local_search:
-                LSO(mut,tsp)
+            # if local_search:
+            #     LSO(mut,tsp)
             offspring.append(mut)
         #Mutation of seed population
         # mutated_population = list()
@@ -306,7 +309,8 @@ def mean(list):
 @jit
 def LSO(indiv,tsp):
     # 2-opt local search
-    bestIndividual = indiv
+    bestIndividual = CandidateSolution(tsp,order=indiv.order)
+    bestIndividual.fitness = indiv.fitness
 
     for i in range(0,len(indiv.order)-2):
         #Insert loop into the first position
@@ -333,20 +337,20 @@ def LSO(indiv,tsp):
 p50 = Parameters(lamda=200, mu=1000, k=2, its=5000,lower_bound = 0.8,upper_bound=1,standard_alfa=0.1,random_proba=0.8) # Perfect with lamda, mu
 p100 = Parameters(lamda=200, mu=1000, k=2, its=5000,lower_bound=0.8,upper_bound=1,standard_alfa=0.1,random_proba=0.8) #Perfect with lamda, mu
 p250 = Parameters(lamda=100, mu=500, k=2, its=5000,lower_bound=0.8,upper_bound=1,standard_alfa=0.3,random_proba=0.8) #Perfect with lamda,mu
-p500 = Parameters(lamda=50, mu=125, k=2, its=5000,lower_bound=0.8,upper_bound=1,standard_alfa=0.1,random_proba=0.7) #Very very good (80k)
-p1000 = Parameters(lamda=100, mu=250, k=2, its=5000,lower_bound=0.8,upper_bound=1,standard_alfa=0.1,random_proba=0.8) #Very very good (80k)
+p500 = Parameters(lamda=100, mu=500, k=2, its=5000,lower_bound=0.8,upper_bound=1,standard_alfa=0.1,random_proba=0.8) #Very very good (80k)
+p750 = Parameters(lamda=100, mu=250, k=5, its=5000,lower_bound=1,upper_bound=1,standard_alfa=0.1,random_proba=0.6) #Very very good 
+p1000 = Parameters(lamda=50, mu=250, k=2, its=5000,lower_bound=0.8,upper_bound=1,standard_alfa=0.1,random_proba=0.8) #Very very good (80k)
 reporter = r0827509()
 
 # reporter.optimize('tour50.csv',p50)
-reporter.optimize('tour100.csv',p100)
+# reporter.optimize('tour100.csv',p100)
 # reporter.optimize('tour250.csv',p250)
-# reporter.optimize('tour500.csv',p500)
-# reporter.optimize('tour750.csv',p500)
+reporter.optimize('tour500.csv',p500)
+# reporter.optimize('tour750.csv',p750)
 # reporter.optimize('tour1000.csv',p500)
 
 #Initialization is now very very good and almost on par with benchmark
 #What to do :
-#Mix of greedy and random initialization
 # Improve diversity promotion
 #Use a good local search
 #Better recombination
