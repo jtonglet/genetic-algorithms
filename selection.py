@@ -36,6 +36,12 @@ def elimination(population, offspring, lamda):
     order = sort_according_to_fitnesses(population)
     return order[0:lamda]
 
+def lambdamu_elimination(population,offspring,lamda):
+    #Keep only the offsprings : require mu much bigger than lamda
+    order = sort_according_to_fitnesses(offspring)
+    return order[0:lamda]
+
+
 
 
 
