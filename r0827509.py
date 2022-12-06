@@ -6,18 +6,20 @@ import mutation
 import selection
 import order_crossover
 import time
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from numba import jit
 
 
 
 class Parameters:
-    def __init__(self, lamda, mu, k, its,upper_bound):
+    def __init__(self, lamda, mu, k, its,lower_bound,upper_bound,standard_alfa):
         self.lamda = lamda
         self.its = its
         self.mu = mu
         self.k = k
+        self.lower_bound = lower_bound
         self.upper_bound = upper_bound
+        self.standard_alfa = standard_alfa
 
 
 class r0827509:
@@ -27,9 +29,8 @@ class r0827509:
 
     # The evolutionary algorithm's main loop
     def optimize(self, filename,
-                 parameters = Parameters(lamda=400, mu=100, k=2, its=500, upper_bound=0.8),
+                 parameters = Parameters(lamda=400, mu=100, k=2, its=500, lower_bound = 0.5,upper_bound=0.8,standard_alfa=0.1),
                  heuristic=True):
-        # Read distance matrix from file.
         file = open(filename)
         distanceMatrix = np.loadtxt(file, delimiter=",")
         file.close()
@@ -40,16 +41,17 @@ class r0827509:
         # g_time=[]
         yourConvergenceTestsHere = True
 
+
         while( yourConvergenceTestsHere):
             ##################
             # Initialization #
             ##################
-
+            
             start_time = time.time()
             if heuristic:
-                population = heur_initialize(tsp,parameters.lamda,parameters.upper_bound)
+                population = heur_initialize(tsp,parameters.lamda,parameters.standard_alfa,parameters.lower_bound,parameters.upper_bound)
             else:
-                population = initialize(tsp, parameters.lamda)
+                population = initialize(tsp, parameters.lamda,parameters.standard_alfa)
         
             # Evaluate fitness and reporting
             fitnesses = [indiv.fitness for indiv in population]
@@ -57,37 +59,47 @@ class r0827509:
             meanObjective=  mean(fitnesses)
             print(0, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
             print('Time needed to initialize the population : %s seconds'%(time.time()-start_time))
-            for i in range(1, parameters.its+1): #Main loop
-                # Selection, recombination, and mutation
-                offspring = list()
-                no_diff = 0
-                for _ in range(1, parameters.mu): #Offsprings for this iteration
-                    p_1 = selection.selection(population, parameters.k)
-                    p_2 = selection.selection(population, parameters.k)
-                    child = CandidateSolution(tsp,standard_alfa=0.1, order=order_crossover.OrderCrossover(p_1.order, p_2.order))
-                    child.computeFitness()
-                    mutated = mutation.inversion_mutate(child)
-                    # LSO(mutated)
-                    offspring.append(mutated)
 
+            ##################
+            # Create islands #
+            ##################
+            half_pop = round(len(population)/2)
+            island1 = population[:half_pop]
+            island2 = population[half_pop:]
 
-                #Mutation of seed population
-                mutated_population = list()
-                for ind in population:
-                    mut = mutation.inversion_mutate(ind)
-                    # LSO(mut,tsp)
-                    mutated_population.append(mut)
-                population = mutated_population
+            #############
+            # Main loop #
+            #############
+            same_best_counter = 0
+            for i in range(1, parameters.its+1): 
 
+                if i%20==0:
+                    indiv_to_move = 5
+                    #Move individuals between islands
+                    moveto1 =  []
+                    moveto2 = []
+                    for _ in range(indiv_to_move):
+                        moveto1.append(selection.selection(island2, parameters.k))
+                        moveto2.append(selection.selection(island1, parameters.k))
+                    island1 = [i for i in island1 if i not in  moveto2]
+                    island1 += moveto1
+                    island2 = [i for i in island2 if i not in  moveto1]
+                    island2 += moveto2
 
-                # Elimination
-                population = selection.elimination(population, offspring, parameters.lamda)
-
+                island1 = self.create_new_generation(tsp,island1,order_crossover.OrderCrossover,parameters)
+                island2 = self.create_new_generation(tsp,island2,order_crossover.OrderCrossover,parameters)
+                population = island1 + island2
                 # Evaluate fitness and reporting
                 #The best objective and best solutions are at the front of the population after the elimination
-                bestObjective = max([indiv.fitness for indiv in population])
-                bestSolution = population[0]
-                meanObjective = mean([indiv.fitness for indiv in population])
+                fitnesses = [indiv.fitness for indiv in population]
+                if bestObjective == max(fitnesses):
+                    same_best_counter +=1
+                else:
+                    same_best_counter=0
+                bestObjective = max(fitnesses)
+                bestSolution = population[fitnesses.index(max(fitnesses))]
+                meanObjective = mean(fitnesses)
+
 
                 # g_best.append([abs(int(bestObjective))])
                 # g_mean.append([abs(int(meanObjective))])
@@ -96,17 +108,17 @@ class r0827509:
                 print(i, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
 
 
-                # Call the reporter with:
-                #  - the mean objective function value of the population
-                #  - the best objective function value of the population
-                #  - a 1D numpy array in the cycle notation containing the best solution
-                #    with city numbering starting from 0
                 timeLeft = self.reporter.report(meanObjective, bestObjective, np.array(bestSolution.order))
                 if timeLeft < 0:
                     print('No time left')
                     print('Current iter %s'%i)
                     print('Results after timeout')
                     print(i, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
+                    finalFitness = bestObjective
+                    break
+
+                if same_best_counter>=100:
+                    print('Same best for 100 iterations')
                     finalFitness = bestObjective
                     break
 
@@ -117,12 +129,33 @@ class r0827509:
                     print(i, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
                     
                     finalFitness = bestObjective
+                    break
             
             #Either the max num of iterations is reached or the time left is up
             yourConvergenceTestsHere = False
 
-        # Your code here.
         return finalFitness
+
+    
+    def create_new_generation(self,tsp,population,crossover,parameters):
+
+        offspring = list()
+        for _ in range(1, parameters.mu): #Offsprings for this iteration
+            p_1 = selection.selection(population, parameters.k)
+            p_2 = selection.selection(population, parameters.k)
+            child = CandidateSolution(tsp,standard_alfa=parameters.standard_alfa, order=crossover(p_1.order, p_2.order))
+            child.computeFitness()
+            mut = mutation.inversion_mutate(child)
+            #LSO(mut,tsp)
+            offspring.append(mut)
+        #Mutation of seed population
+        mutated_population = list()
+        for ind in population:
+            mut = mutation.inversion_mutate(ind)
+            mutated_population.append(mut)
+        population = mutated_population
+        # Elimination
+        return selection.elimination(population, offspring, len(population))
 
 
 
@@ -132,11 +165,12 @@ class TravellingSalesmanProblem:
         #represent distance matrix as a dictionary
         distance_dict = dict()
         j = 0
+        self.valid_transition = {}
         while j < len(distance_matrix):
             distance_dict[j] = {index: distance_matrix[j][index] for index in range(len(distance_matrix[j]))}
+            self.valid_transition[j] = {index for index in range(len(distance_matrix[j])) if not math.isinf(distance_matrix[j][index])}
             j += 1
-        #self.distance_matrix = distance_dict
-        self.distance_matrix = distance_matrix
+        self.distance_matrix = distance_dict
 
 
 class CandidateSolution:
@@ -144,6 +178,7 @@ class CandidateSolution:
         self.alfa = max(0.01, standard_alfa + 0.02 * np.random.normal())
         self.tsp = travelling_salesman_problem
         if order is None:
+            #Do better than pure random, try to guarantee legal path
             initial_state = np.arange(self.tsp.number_of_cities)
             np.random.shuffle(initial_state)
             self.order = initial_state
@@ -178,10 +213,10 @@ class CandidateSolution:
 
 
 """ Randomly initialize the population """
-def initialize(tsp, lamda):
+def initialize(tsp, lamda,standard_alfa=0.1):
     population = list()
     for _ in range(lamda):
-        indiv = CandidateSolution(tsp, 0.1)
+        indiv = CandidateSolution(tsp, standard_alfa)
         indiv.computeFitness()
         population.append(indiv)
     return population
@@ -190,23 +225,31 @@ def initialize(tsp, lamda):
 #This part is very slow, takes about 2 minutes just for 250t
 #Ideas : greedy heuristic but on a random sample only, better python structre for the distance matrix
 
-@jit
-def heur_initialize(tsp, lamda,upper_bound=0.8):
+# @jit
+def heur_initialize(tsp, lamda,standard_alfa=0.1,lower_bound=0.5,upper_bound=0.8):
     print('heuristic initalization')
     population = list()
     distance_matrix_copy = tsp.distance_matrix
     for _ in range(lamda):
-        heur_parameter = random.uniform(0, upper_bound)  #Generate a different one for each indiv
+        heur_parameter = random.uniform(lower_bound, upper_bound)  #Generate a different one for each indiv
         current_city = random.randint(0,tsp.number_of_cities-1)
         order = [current_city]
 
         while len(order) < tsp.number_of_cities-1:
-            if random.uniform(0, 1) > heur_parameter:
+
+            if len(set(tsp.valid_transition[current_city])-set(order)) == 0:
+                last_two = order[:-10]
+                order = order[:-10] #Backtrack from two cities
+                current_city = random.choice([city for city in tsp.valid_transition[order[-1]] if city not in order +last_two])
+                order.append(current_city)
+
+
+            elif random.uniform(0, 1) > heur_parameter:
                 # choose next_city random
-                current_city = random.choice([city for city in range(tsp.number_of_cities) if city not in order])
+                current_city = random.choice([city for city in tsp.valid_transition[order[-1]] if city not in order])
                 order.append(current_city)
             else:
-                current_city = min(set(range(0,tsp.number_of_cities)) - set(order), key=distance_matrix_copy[current_city].__getitem__)
+                current_city = min(set(tsp.valid_transition[order[-1]]) - set(order), key=distance_matrix_copy[current_city].__getitem__)
                 order.append(current_city)
 
         remaining_city = [number for number in range(0,tsp.number_of_cities) if number not in order]
@@ -214,7 +257,7 @@ def heur_initialize(tsp, lamda,upper_bound=0.8):
 
         order = np.array(order)
 
-        indiv = CandidateSolution(tsp, 0.1, order) #0.1
+        indiv = CandidateSolution(tsp, standard_alfa, order) #0.1
         indiv.computeFitness()
         population.append(indiv)
     return population
@@ -249,6 +292,23 @@ def LSO(indiv,problem):
 
 
 #HRM mut, l 200, k 2n its 2000 and greedy --> 300k on 500t
-parameters = Parameters(lamda=100, mu=100, k=2, its=5000,upper_bound=0.8 )
+p50 = Parameters(lamda=200, mu=200, k=2, its=5000,lower_bound = 0.5,upper_bound=0.8,standard_alfa=0.1) # Perfect
+p100 = Parameters(lamda=200, mu=200, k=2, its=5000,lower_bound=0.5,upper_bound=0.8,standard_alfa=0.1) #Perfect
+p250 = Parameters(lamda=100, mu=100, k=2, its=5000,lower_bound=1,upper_bound=1,standard_alfa=0.3)
+p500 = Parameters(lamda=25, mu=25, k=2, its=5000,lower_bound=1,upper_bound=1,standard_alfa=0.3) #Very very good (80k)
+p1000 = Parameters(lamda=100, mu=100, k=2, its=5000,lower_bound=1,upper_bound=1,standard_alfa=0.8) #Very very good (80k)
 reporter = r0827509()
-reporter.optimize('tour50.csv',parameters)
+# reporter.optimize('tour50.csv',p50)
+# reporter.optimize('tour100.csv',p100)
+# reporter.optimize('tour250.csv',p250)
+# reporter.optimize('tour500.csv',p500)
+# reporter.optimize('tour750.csv',p500)
+reporter.optimize('tour1000.csv',p500)
+
+#Initialization is now very very good and almost on par with benchmark
+#What to do :
+#Mix of greedy and random initialization
+# Improve diversity promotion
+#Use a good local search
+#Better recombination
+#Elitism
