@@ -1,23 +1,6 @@
 import random
 
 
-# def fitness(travelling_salesman_problem, individual):
-#     distance = 0
-#     index = 0
-#     while index < len(individual.order) - 1:
-#         current_city = individual.order[index]
-#         next_city = individual.order[index + 1]
-#         distance += travelling_salesman_problem.distance_matrix[current_city][next_city]
-#         index += 1
-
-#     try:
-#         distance += travelling_salesman_problem.distance_matrix[individual.order[-1]][individual.order[0]]
-#     except Exception as e:
-#         print('ECCPETIN5', e)
-#         print(individual.order)
-#     # print(distance)
-#     return -distance
-
 """ k-tournament selection """
 def selection(population, k):
     selected = random.sample(population, k)
@@ -31,10 +14,12 @@ def sort_according_to_fitnesses(candidate_solutions_list):
 
 def elimination(population, offspring, lamda):
     #lambda + mu elimination
-    for element in offspring:
-        population.append(element)
-    order = sort_according_to_fitnesses(population)
+    order = population + offspring
+    order = sort_according_to_fitnesses(order)
     return order[0:lamda]
+
+# def k_tournament_elimination(population,offspring)
+
 
 def lambdamu_elimination(population,offspring,lamda):
     #Keep only the offsprings : require mu much bigger than lamda
