@@ -272,13 +272,17 @@ def initialize(tsp, lamda,standard_alfa=0.1):
 #Ideas : greedy heuristic but on a random sample only, better python structre for the distance matrix
 
 @jit
-def heur_initialize(tsp, lamda,standard_alfa=0.1,lower_bound=0.5,upper_bound=0.8,random_proba=0.8):
+def heur_initialize(tsp, lamda,standard_alfa=0.1,lower_bound=0.5,upper_bound=0.8,random_share=0.8):
     print('heuristic initalization')
     population = list()
     distance_matrix_copy = tsp.distance_matrix
-    for _ in range(lamda):
-        if random.uniform(0,1) > random_proba:  #0.9 is the threshold to use the heuristic initialization, otherwise it is random initialization
-            # print('okay')
+    n_random = round(lamda * random_share)
+    for i in range(lamda):
+        if i < n_random:  #Make it deterministic instead
+            #Standard initialization
+            indiv = CandidateSolution(tsp,standard_alfa)
+        else:
+            #Greedy initialization
             heur_parameter = random.uniform(lower_bound, upper_bound)  #Generate a different one for each indiv
             current_city = random.randint(0,tsp.number_of_cities-1)
             order = [current_city]
@@ -305,9 +309,6 @@ def heur_initialize(tsp, lamda,standard_alfa=0.1,lower_bound=0.5,upper_bound=0.8
 
             order = np.array(order)
             indiv = CandidateSolution(tsp, standard_alfa, order) #0.1
-        else:
-            #Standard initialization
-            indiv = CandidateSolution(tsp,standard_alfa)
         #Add the individual to the population
         indiv.computeFitness()
         population.append(indiv)
@@ -325,26 +326,32 @@ def subpath_cost(order,tsp):
     # print(order)
     for t in range(0,len(order)-1):
         # print(tsp.distance_matrix[order[t]][order[t+1]])
-        distance += tsp.distance_matrix[order[t]][order[t+1]]
+        cost = tsp.distance_matrix[order[t]][order[t+1]]
+        if math.isinf(cost):
+            #Quit early if infinite found
+            distance =  math.inf
+            break
+        else:
+            distance += cost
     return distance
 
 
 @jit
 def LSO(indiv,tsp):
     # 2-opt local search
-    # # while cond:
     for i in range(1,len(indiv.order)-2):
         #quadratic complexity
-        # for j in range(i+1,len(indiv.order)-1):
         for j in range(i+1,len(indiv.order)-1):
-            # cond=False
             inverted_subpath = indiv.order[i:j+1][::-1]
-            old_cost =  tsp.distance_matrix[indiv.order[i-1]][indiv.order[i]] + tsp.distance_matrix[indiv.order[j]][indiv.order[j+1]]  + subpath_cost(indiv.order[i:j+1],tsp)
-            new_cost =  tsp.distance_matrix[indiv.order[i]][indiv.order[j+1]]  + tsp.distance_matrix[indiv.order[i-1]][indiv.order[j]] + subpath_cost(inverted_subpath,tsp)
-            if new_cost < old_cost and not math.isinf(new_cost):
-                indiv.order[i:j+1] = inverted_subpath
-                # break
-                # cond = True
-                # break
+            inverted_subpath_cost = subpath_cost(inverted_subpath,tsp)
+            #Check first of all that the inverted subpath has no infinite cost, if it is the case we can ignore the rest
+            if not math.isinf(inverted_subpath_cost):
+                old_cost =  tsp.distance_matrix[indiv.order[i-1]][indiv.order[i]] + tsp.distance_matrix[indiv.order[j]][indiv.order[j+1]]  + subpath_cost(indiv.order[i:j+1],tsp)
+                new_cost =  tsp.distance_matrix[indiv.order[i]][indiv.order[j+1]]  + tsp.distance_matrix[indiv.order[i-1]][indiv.order[j]] + inverted_subpath_cost
+                if new_cost < old_cost and not math.isinf(new_cost):
+                    indiv.order[i:j+1] = inverted_subpath
+            else:
+                #All larger inverted paths will also have infinite cost, we can break an pick another i
+                break
               
     indiv.computeFitness()
