@@ -79,18 +79,19 @@ class r0827509:
             same_best_counter = 0
             for i in range(1, parameters.its+1): 
 
-                if i%50==0:
-                    island1, island2 = self.swap_islands(island1,island2,parameters.lamda//20)
+                # if i%20==0:
+                #     island1, island2 = self.swap_islands(island1,island2,parameters.lamda//20)
 
                 #Idea : different crossover for each island
-                if i%5==0:
+                if i%10==0:
                     print('LSO round')
                     local_search = True
                 else:
                     local_search = False
-                island1 = self.create_new_generation(tsp,island1,order_crossover.OrderCrossover,selection.lambdamu_elimination,parameters,local_search)
-                island2 = self.create_new_generation(tsp,island2,order_crossover.OrderCrossover,selection.lambdamu_elimination,parameters,local_search)
-                population = island1 + island2
+                # island1 = self.create_new_generation(tsp,island1,order_crossover.OrderCrossover,selection.lambdamu_elimination,parameters,local_search)
+                # island2 = self.create_new_generation(tsp,island2,order_crossover.OrderCrossover,selection.lambdamu_elimination,parameters,local_search)
+                # population = island1 + island2
+                population = self.create_new_generation(tsp,population,order_crossover.OrderCrossover,selection.lambdamu_elimination,parameters,local_search)
                 # Evaluate fitness and reporting
                 #The best objective and best solutions are at the front of the population after the elimination
                 fitnesses = [indiv.fitness for indiv in population]
@@ -151,8 +152,6 @@ class r0827509:
             child = CandidateSolution(tsp,standard_alfa=parameters.standard_alfa, order=crossover(p_1.order, p_2.order))
             child.computeFitness()
             mut = mutation.inversion_mutate(child)
-            # if local_search:
-            #     LSO(mut,tsp)
             offspring.append(mut)
         #Mutation of seed population
         # mutated_population = list()
@@ -160,9 +159,17 @@ class r0827509:
         #     mut = mutation.inversion_mutate(ind)
         #     mutated_population.append(mut)
         # population = mutated_population
-        # Elimination
-        # return selection.elimination(population, offspring, len(population))
-        return elimination(population,offspring, len(population))
+        elite = selection.elimination(population,offspring,1)  #To make sure that the best solution remains whatever
+        population = elite + elimination(population,offspring, len(population)-1)
+        
+        #Local search best individuals
+        if local_search:
+            start_time = time.time()
+            for idx in range(0,1):
+                #The population is sorted, we make local search on the best one
+                LSO(population[idx],tsp)
+            print('Time needed for LSO : %s'%(time.time()-start_time))
+        return population
 
     def swap_islands(self,island1,island2,indiv_to_swap=5):
         #Move individuals between islands
@@ -195,6 +202,7 @@ class TravellingSalesmanProblem:
 
 
 class CandidateSolution:
+    @jit
     def __init__(self, travelling_salesman_problem, standard_alfa=0.1, order=None):
         self.alfa = max(0.01, standard_alfa + 0.02 * np.random.normal())
         self.tsp = travelling_salesman_problem
@@ -229,17 +237,20 @@ class CandidateSolution:
         distance = 0
         penalty = 0
         for i in range(len(self.order)-1):
+            # print((self.order[i],self.order[i+1]))
             new_dist = self.tsp.distance_matrix[self.order[i]][self.order[i+1]]
             if math.isinf(new_dist):
                 penalty += 1
             distance += new_dist
-        try:
-            last_dist = self.tsp.distance_matrix[self.order[-1]][self.order[0]]
-            if math.isinf(last_dist):
-                penalty +=1
-            distance += last_dist
-        except Exception as e:
-            print(self.order)
+            # print(new_dist)
+        last_dist = self.tsp.distance_matrix[self.order[-1]][self.order[0]]
+        # print((self.order[-1],self.order[0]))
+        if math.isinf(last_dist):
+            penalty +=1
+        distance += last_dist
+        # print(last_dist)
+        # except Exception as e:
+        #     print(self.order)
         
         if math.isinf(distance):
             #Convert infinite to a very large negative number 
@@ -306,51 +317,34 @@ def heur_initialize(tsp, lamda,standard_alfa=0.1,lower_bound=0.5,upper_bound=0.8
 def mean(list):
     return sum(list)/len(list)
 
+
+def subpath_cost(order,tsp):
+    #Compute the fitness of a subsample[i,j] of the indiv
+    #Is needed because the tsp is not symmetric, so reverting the central part also has a cost.
+    distance = 0
+    # print(order)
+    for t in range(0,len(order)-1):
+        # print(tsp.distance_matrix[order[t]][order[t+1]])
+        distance += tsp.distance_matrix[order[t]][order[t+1]]
+    return distance
+
+
 @jit
 def LSO(indiv,tsp):
     # 2-opt local search
-    bestIndividual = CandidateSolution(tsp,order=indiv.order)
-    bestIndividual.fitness = indiv.fitness
-
-    for i in range(0,len(indiv.order)-2):
-        #Insert loop into the first position
-        # print(indiv_copy.order)
-        indiv_copy = CandidateSolution(tsp,order=indiv.order)
-        indiv_copy.order[i], indiv_copy.order[i+1] = indiv.order[i+1], indiv_copy.order[i]
-        # indiv_copy.order[1:i+1] = indiv.order[0:i]
-        # indiv_copy.order[i+1:] = indiv.order[i+1:]
-        #Instead of creating copies, only create it if the changes in the 3 arcs results in a cost reduction !!
-        #That's why we need to use the distance matrix, to not compute the full cost each time
-        indiv_copy.computeFitness()
-        if indiv_copy.fitness > bestIndividual.fitness:
-            bestIndividual.order = indiv_copy.order
-            bestIndividual.fitness = indiv_copy.fitness
-            # print('LSO has improved results')
-
-    indiv.order = bestIndividual.order
+    # # while cond:
+    for i in range(1,len(indiv.order)-2):
+        #quadratic complexity
+        # for j in range(i+1,len(indiv.order)-1):
+        for j in range(i+1,len(indiv.order)-1):
+            # cond=False
+            inverted_subpath = indiv.order[i:j+1][::-1]
+            old_cost =  tsp.distance_matrix[indiv.order[i-1]][indiv.order[i]] + tsp.distance_matrix[indiv.order[j]][indiv.order[j+1]]  + subpath_cost(indiv.order[i:j+1],tsp)
+            new_cost =  tsp.distance_matrix[indiv.order[i]][indiv.order[j+1]]  + tsp.distance_matrix[indiv.order[i-1]][indiv.order[j]] + subpath_cost(inverted_subpath,tsp)
+            if new_cost < old_cost and not math.isinf(new_cost):
+                indiv.order[i:j+1] = inverted_subpath
+                # break
+                # cond = True
+                # break
+              
     indiv.computeFitness()
-
-
-
-
-#HRM mut, l 200, k 2n its 2000 and greedy --> 300k on 500t
-p50 = Parameters(lamda=200, mu=1000, k=2, its=5000,lower_bound = 0.8,upper_bound=1,standard_alfa=0.1,random_proba=0.8) # Perfect with lamda, mu
-p100 = Parameters(lamda=200, mu=1000, k=2, its=5000,lower_bound=0.8,upper_bound=1,standard_alfa=0.1,random_proba=0.8) #Perfect with lamda, mu
-p250 = Parameters(lamda=100, mu=500, k=2, its=5000,lower_bound=0.8,upper_bound=1,standard_alfa=0.3,random_proba=0.8) #Perfect with lamda,mu
-p500 = Parameters(lamda=100, mu=500, k=2, its=5000,lower_bound=0.8,upper_bound=1,standard_alfa=0.1,random_proba=0.8) #Very very good (80k)
-p750 = Parameters(lamda=100, mu=250, k=5, its=5000,lower_bound=1,upper_bound=1,standard_alfa=0.1,random_proba=0.6) #Very very good 
-p1000 = Parameters(lamda=50, mu=250, k=2, its=5000,lower_bound=0.8,upper_bound=1,standard_alfa=0.1,random_proba=0.8) #Very very good (80k)
-reporter = r0827509()
-
-# reporter.optimize('tour50.csv',p50)
-# reporter.optimize('tour100.csv',p100)
-# reporter.optimize('tour250.csv',p250)
-reporter.optimize('tour500.csv',p500)
-# reporter.optimize('tour750.csv',p750)
-# reporter.optimize('tour1000.csv',p500)
-
-#Initialization is now very very good and almost on par with benchmark
-#What to do :
-# Improve diversity promotion
-#Use a good local search
-#Better recombination
