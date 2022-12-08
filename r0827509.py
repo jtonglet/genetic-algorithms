@@ -14,7 +14,8 @@ warnings.filterwarnings('ignore')
 
 
 class Parameters:
-    def __init__(self, lamda, mu, k, its,lower_bound,upper_bound,standard_alfa,random_proba):
+    def __init__(self, lamda=100, mu=100, k=2, its=50,lower_bound=0.5,upper_bound=0.8,standard_alfa=0.1,
+                random_share=0.8,mutation='inversion',recombination='order',elimination='lambda+mu'):
         self.lamda = lamda
         self.its = its
         self.mu = mu
@@ -22,7 +23,10 @@ class Parameters:
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
         self.standard_alfa = standard_alfa
-        self.random_proba = random_proba
+        self.random_share = random_share
+        self.mutation = mutation
+        self.recombination = recombination
+        self.elimination = elimination
 
 
 class r0827509:
@@ -33,7 +37,7 @@ class r0827509:
     # The evolutionary algorithm's main loop
     def optimize(self, filename,
                  parameters = Parameters(lamda=400, mu=100, k=2, its=500, lower_bound = 0.5,upper_bound=0.8,standard_alfa=0.1,
-                                        random_proba=0.8),
+                                        random_share=0.8),
                  heuristic=True):
         file = open(filename)
         distanceMatrix = np.loadtxt(file, delimiter=",")
@@ -55,7 +59,7 @@ class r0827509:
             if heuristic:
                 population = heur_initialize(tsp,parameters.lamda,parameters.standard_alfa,
                                              parameters.lower_bound,parameters.upper_bound,
-                                             parameters.random_proba)
+                                             parameters.random_share)
             else:
                 population = initialize(tsp, parameters.lamda,parameters.standard_alfa)
         
@@ -91,7 +95,7 @@ class r0827509:
                 # island1 = self.create_new_generation(tsp,island1,order_crossover.OrderCrossover,selection.lambdamu_elimination,parameters,local_search)
                 # island2 = self.create_new_generation(tsp,island2,order_crossover.OrderCrossover,selection.lambdamu_elimination,parameters,local_search)
                 # population = island1 + island2
-                population = self.create_new_generation(tsp,population,order_crossover.OrderCrossover,selection.lambdamu_elimination,parameters,local_search)
+                population = self.create_new_generation(tsp,population,parameters,local_search,True)
                 # Evaluate fitness and reporting
                 #The best objective and best solutions are at the front of the population after the elimination
                 fitnesses = [indiv.fitness for indiv in population]
@@ -140,27 +144,43 @@ class r0827509:
         return finalFitness
 
     
-    def create_new_generation(self,tsp,population,crossover,elimination,parameters,local_search=True):
+    def create_new_generation(self,tsp,population,parameters,local_search=True,elitism = True):
         """
         Take a population as input and update it using recombination, mutation, local search, and elimination
         """
+        mutation_dict = {'inversion':mutation.inversion_mutate,
+                         'HPRM':mutation.HPRM}
+        recombination_dict = {'order':order_crossover.OrderCrossover,
+                              'cycle':order_crossover.CycleCrossover}
+        elimination_dict = {'lambda+mu':selection.elimination,
+                            'lambdamu':selection.lambdamu_elimination,
+                            # 'K-tournament':selection.k_tourmanent_elimination
+                            }
 
+        mutation_op = mutation_dict[parameters.mutation]
+        recombination_op = recombination_dict[parameters.recombination]
+        elimination_op = elimination_dict[parameters.elimination]
         offspring = list()
+        if elitism:
+            elite = selection.elimination(population,offspring,1) 
+        else:
+            elite = []
         for _ in range(1, parameters.mu): #Offsprings for this iteration
             p_1 = selection.selection(population, parameters.k)
             p_2 = selection.selection(population, parameters.k)
-            child = CandidateSolution(tsp,standard_alfa=parameters.standard_alfa, order=crossover(p_1.order, p_2.order))
+            child = CandidateSolution(tsp,standard_alfa=parameters.standard_alfa, order=recombination_op(p_1.order, p_2.order))
             child.computeFitness()
-            mut = mutation.inversion_mutate(child)
+            mut = mutation_op(child)
             offspring.append(mut)
-        #Mutation of seed population
-        # mutated_population = list()
-        # for ind in population:
-        #     mut = mutation.inversion_mutate(ind)
-        #     mutated_population.append(mut)
-        # population = mutated_population
-        elite = selection.elimination(population,offspring,1)  #To make sure that the best solution remains whatever
-        population = elite + elimination(population,offspring, len(population)-1)
+        if parameters.elimination != 'lambdamu':
+        #Mutation of seed population,
+            mutated_population = list()
+            for ind in population:
+                mut = mutation._op(ind)
+                mutated_population.append(mut)
+            population = mutated_population
+         #To make sure that the best solution remains whatever
+        population = elite + elimination_op(population,offspring, len(population)-1)
         
         #Local search best individuals
         if local_search:
@@ -173,11 +193,6 @@ class r0827509:
 
     def swap_islands(self,island1,island2,indiv_to_swap=5):
         #Move individuals between islands
-        # moveto1 =  []
-        # moveto2 = []
-        # for _ in range(indiv_to_swap):
-            # moveto1.append(selection.selection(island2, parameters.k))
-            # moveto2.append(selection.selection(island1, parameters.k))
         moveto1 = random.sample(island2,indiv_to_swap)
         moveto2 = random.sample(island1,indiv_to_swap)
         island1 = [i for i in island1 if i not in  moveto2]
@@ -204,7 +219,7 @@ class TravellingSalesmanProblem:
 class CandidateSolution:
     @jit
     def __init__(self, travelling_salesman_problem, standard_alfa=0.1, order=None):
-        self.alfa = max(0.01, standard_alfa + 0.02 * np.random.normal())
+        self.alfa = max(0.1, standard_alfa + 0.02 * np.random.normal())
         self.tsp = travelling_salesman_problem
         if order is None:
             #Do better than pure random, try to guarantee legal path
@@ -219,8 +234,7 @@ class CandidateSolution:
                 else:
                 # choose next_city random
                     current_city = random.choice([city for city in self.tsp.valid_transition[order[-1]] if city not in order])
-                    order.append(current_city)
-                
+                    order.append(current_city)     
             remaining_city = [number for number in range(0,self.tsp.number_of_cities) if number not in order]
             order.append(remaining_city[0])
 
@@ -268,14 +282,10 @@ def initialize(tsp, lamda,standard_alfa=0.1):
     return population
 
 """ Heuristically initialize the population """
-#This part is very slow, takes about 2 minutes just for 250t
-#Ideas : greedy heuristic but on a random sample only, better python structre for the distance matrix
-
 @jit
 def heur_initialize(tsp, lamda,standard_alfa=0.1,lower_bound=0.5,upper_bound=0.8,random_share=0.8):
     print('heuristic initalization')
     population = list()
-    distance_matrix_copy = tsp.distance_matrix
     n_random = round(lamda * random_share)
     for i in range(lamda):
         if i < n_random:  #Make it deterministic instead
@@ -286,7 +296,6 @@ def heur_initialize(tsp, lamda,standard_alfa=0.1,lower_bound=0.5,upper_bound=0.8
             heur_parameter = random.uniform(lower_bound, upper_bound)  #Generate a different one for each indiv
             current_city = random.randint(0,tsp.number_of_cities-1)
             order = [current_city]
-
             while len(order) < tsp.number_of_cities-1:
 
                 if len(set(tsp.valid_transition[current_city])-set(order)) == 0:
@@ -294,24 +303,22 @@ def heur_initialize(tsp, lamda,standard_alfa=0.1,lower_bound=0.5,upper_bound=0.8
                     order = order[:-10] #Backtrack from two cities
                     current_city = random.choice([city for city in tsp.valid_transition[order[-1]] if city not in order +last_ten])
                     order.append(current_city)
-
-
                 elif random.uniform(0, 1) > heur_parameter:
                     # choose next_city random
                     current_city = random.choice([city for city in tsp.valid_transition[order[-1]] if city not in order])
                     order.append(current_city)
                 else:
-                    current_city = min(set(tsp.valid_transition[order[-1]]) - set(order), key=distance_matrix_copy[current_city].__getitem__)
+                    current_city = min(set(tsp.valid_transition[order[-1]]) - set(order), key=tsp.distance_matrix[current_city].__getitem__)
                     order.append(current_city)
-
             remaining_city = [number for number in range(0,tsp.number_of_cities) if number not in order]
             order.append(remaining_city[0])
-
             order = np.array(order)
             indiv = CandidateSolution(tsp, standard_alfa, order) #0.1
         #Add the individual to the population
         indiv.computeFitness()
         population.append(indiv)
+        print('indiv created')
+    print('Intial population size %s '%len(population))
     return population
 
 
