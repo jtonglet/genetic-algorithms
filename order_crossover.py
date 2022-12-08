@@ -35,7 +35,7 @@ def CycleCrossover(mum, dad):
     nb_cities = len(mum)
     dad_copy = dad.copy()
     child_order = np.array(nb_cities * [-1])
-    idx = 0
+    idx = random.randint(0,nb_cities-1)
     child_order[idx] = mum[idx]
     no_cycle=True
     while no_cycle:
