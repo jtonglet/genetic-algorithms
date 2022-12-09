@@ -45,11 +45,9 @@ def scramble_mutate(individual):
         smallest_index = min(i, j)
         biggest_index = max(i, j)
         subset = individual.order[smallest_index:biggest_index]
-        # print('scrambled', subset)
         random.shuffle(subset)
-        individual.order = individual.order[:smallest_index] + subset + individual.order[biggest_index:]
-        # print('order after scramble mutation', individual.order)
-
+        subset = np.array(subset)
+        individual.order = np.append(individual.order[:smallest_index], np.append(subset,individual.order[biggest_index:]))  
         individual.computeFitness() 
     return individual
 
