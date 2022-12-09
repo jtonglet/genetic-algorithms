@@ -1,5 +1,6 @@
 import random
 import numpy as np
+from numba import jit
 """
 Procedure: OX
 1. Select a substring from a parent at random.
@@ -15,6 +16,8 @@ offspring.
 #Jonathan : can't we create two offsprings each time? we select the same i and j but inverse the roles of mum and dad for the 2nd one
 def OrderCrossover(mum, dad):
     # Do not change the real dad but take a copy instead
+    # print(len(np.unique(dad)))
+    # print(len(np.unique(mum)))
     dad_copy = dad.copy()
     nb_cities = len(mum)
     i = random.randint(0,nb_cities-1)
@@ -53,6 +56,66 @@ def CycleCrossover(mum, dad):
     
     return child_order
 
-# mum = np.array([1,2,3,4,5,6,7,8,9])
-# dad = np.array([5,4,6,9,2,3,7,8,1])
+@jit
+def CX2(mum,dad):
+    nb_cities = len(mum)
+    dad_copy = dad.copy()
+    child_order = np.array(nb_cities * [-1])
+    idx = random.randint(0,nb_cities-1)
+    child_order[idx] = mum[idx]
+    no_cycle=True
+    while no_cycle:
+        new_city = dad[np.where(mum==dad[idx])[0]]
+        idx = np.where(mum==dad[np.where(mum ==dad[idx])[0]])[0]
+        if new_city in child_order:
+            no_cycle =False
+        else:
+            child_order[idx] = new_city
+
+    dad_copy=np.array([elem for elem in dad_copy if elem not in child_order],dtype="int")
+    for index in range(len(child_order)):
+        if child_order[index] == -1:
+            child_order[index], dad_copy = dad_copy[0], dad_copy[1:]
+    
+    return child_order
+
+def CSOX(p1,p2):
+    offsprings = {}
+    nb_cities = len(p2)
+    r1 = random.randint(1,nb_cities-4)
+    r2 = random.randint(r1+2,nb_cities-2)
+    # r1 = 2
+    # r2=4
+    for i in range(3):
+        p1_copy = p1.copy()
+        p2_copy = p2.copy()
+        if i ==0:
+            pos1,pos2 = r1,r2
+        elif i==1:
+            pos1,pos2=0,r1
+        else:
+            pos1,pos2=r2+1,nb_cities-1
+        
+        offsprings[2*i+1],offsprings[2*i+2] = np.array(nb_cities * [-1]),np.array(nb_cities * [-1])
+        offsprings[2*i+1][pos1:pos2+1] = p1[pos1:pos2+1]
+        offsprings[2*i+2][pos1:pos2+1] = p2[pos1:pos2+1]
+        # print(offsprings[2*i+2][pos1:pos2+1])
+        #Update parents copy
+        p1_copy = [town for town in np.concatenate((p1[pos2+1:],p1[:pos2+1]))if town not in offsprings[2*i+2]]
+        p2_copy = [town for town in np.concatenate((p2[pos2+1:],p2[:pos2+1])) if town not in offsprings[2*i+1]]
+        for index in range(pos2+1,len(offsprings[2*i+1])):
+            # if offsprings[2*i+1][pos2+1:][index] == -1:
+            # print(index)
+            offsprings[2*i+1][index], p2_copy = p2_copy[0], p2_copy[1:]
+            offsprings[2*i+2][index], p1_copy = p1_copy[0], p1_copy[1:]
+        for index in range(pos1):
+            # if offsprings[2*i+1][pos2+1:][index] == -1:
+            offsprings[2*i+1][index], p2_copy = p2_copy[0], p2_copy[1:]
+            offsprings[2*i+2][index], p1_copy = p1_copy[0], p1_copy[1:]    
+    return offsprings
+
+# mum = np.array([3,5,8,2,1,9,4,6,7])
+# dad = np.array([8,1,5,7,3,4,6,2,9])
+# print(CSOX(mum,dad))
 # print(CycleCrossover(mum,dad))
+# print(CX2(mum,dad))
