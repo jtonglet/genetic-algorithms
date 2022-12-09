@@ -4,7 +4,7 @@ import random
 import math
 import mutation
 import selection
-import order_crossover
+import crossover
 import time
 # import matplotlib.pyplot as plt
 from numba import jit
@@ -15,7 +15,7 @@ warnings.filterwarnings('ignore')
 
 class Parameters:
     def __init__(self, lamda=100, mu=100, k=2, its=50,lower_bound=0.5,upper_bound=0.8,standard_alfa=0.1,
-                random_share=0.8,mutation='inversion',recombination='order',elimination='lambda+mu'):
+                random_share=0.8,elimination='lambda+mu'):
         self.lamda = lamda
         self.its = its
         self.mu = mu
@@ -24,8 +24,6 @@ class Parameters:
         self.upper_bound = upper_bound
         self.standard_alfa = standard_alfa
         self.random_share = random_share
-        self.mutation = mutation
-        self.recombination = recombination
         self.elimination = elimination
 
 
@@ -66,6 +64,12 @@ class r0827509:
             # Evaluate fitness and reporting
             fitnesses = [indiv.fitness for indiv in population]
             bestObjective = max(fitnesses)
+            distance = 0
+            bestSolution = population[fitnesses.index(bestObjective)]
+            for i in range(len(bestSolution.order)-1):
+                distance += tsp.distance_matrix[bestSolution.order[i]][bestSolution.order[i+1]]
+                print(distance)
+            print(distance + tsp.distance_matrix[bestSolution.order[-1]][bestSolution.order[0]])
             meanObjective=  mean(fitnesses)
             print(0, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
             print('Time needed to initialize the population : %s seconds'%(time.time()-start_time))
@@ -84,18 +88,20 @@ class r0827509:
             for i in range(1, parameters.its+1): 
 
                 # if i%20==0:
+                #     print('swap round')
                 #     island1, island2 = self.swap_islands(island1,island2,parameters.lamda//20)
 
                 #Idea : different crossover for each island
-                if i%10==0:
-                    print('LSO round')
+                if i%5==0:
+                    # print('LSO round')
                     local_search = True
                 else:
                     local_search = False
-                # island1 = self.create_new_generation(tsp,island1,order_crossover.OrderCrossover,selection.lambdamu_elimination,parameters,local_search)
-                # island2 = self.create_new_generation(tsp,island2,order_crossover.OrderCrossover,selection.lambdamu_elimination,parameters,local_search)
+                # island1 = self.create_new_generation(tsp,island1,parameters,mutation.inversion_mutate,crossover.OrderCrossover,local_search)
+                # island2 = self.create_new_generation(tsp,island2,parameters,mutation.scramble_mutate,crossover.CycleCrossover,local_search)
                 # population = island1 + island2
-                population = self.create_new_generation(tsp,population,parameters,local_search,True)
+                population = self.create_new_generation(tsp,population,parameters,mutation.inversion_mutate,crossover.OrderCrossover,local_search,True)
+                parameters.standard_alfa -= parameters.standard_alfa * 1/parameters.its
                 # Evaluate fitness and reporting
                 #The best objective and best solutions are at the front of the population after the elimination
                 fitnesses = [indiv.fitness for indiv in population]
@@ -104,7 +110,7 @@ class r0827509:
                 else:
                     same_best_counter=0
                 bestObjective = max(fitnesses)
-                bestSolution = population[fitnesses.index(max(fitnesses))]
+                bestSolution = population[fitnesses.index(bestObjective)]
                 meanObjective = mean(fitnesses)
 
 
@@ -124,7 +130,7 @@ class r0827509:
                     finalFitness = bestObjective
                     break
 
-                if same_best_counter>=50:
+                if same_best_counter>=20:
                     print('Same best for 50 iterations')
                     finalFitness = bestObjective
                     break
@@ -144,51 +150,49 @@ class r0827509:
         return finalFitness
 
     
-    def create_new_generation(self,tsp,population,parameters,local_search=True,elitism = True):
+    def create_new_generation(self,tsp,population,parameters,mutation,recombination,local_search=True,elitism = True):
         """
         Take a population as input and update it using recombination, mutation, local search, and elimination
         """
-        mutation_dict = {'inversion':mutation.inversion_mutate,
-                         'HPRM':mutation.HPRM}
-        recombination_dict = {'order':order_crossover.OrderCrossover,
-                              'cycle':order_crossover.CycleCrossover}
         elimination_dict = {'lambda+mu':selection.elimination,
                             'lambdamu':selection.lambdamu_elimination,
-                            # 'K-tournament':selection.k_tourmanent_elimination
+                            'k-tournament':selection.k_tournament_elimination
                             }
 
-        mutation_op = mutation_dict[parameters.mutation]
-        recombination_op = recombination_dict[parameters.recombination]
         elimination_op = elimination_dict[parameters.elimination]
         offspring = list()
         if elitism:
-            elite = selection.elimination(population,offspring,1) 
+            elite = selection.elimination(population,offspring,1,parameters.k) 
+            n = len(population)-1
         else:
             elite = []
+            n=len(population)
         for _ in range(1, parameters.mu): #Offsprings for this iteration
             p_1 = selection.selection(population, parameters.k)
             p_2 = selection.selection(population, parameters.k)
-            child = CandidateSolution(tsp,standard_alfa=parameters.standard_alfa, order=recombination_op(p_1.order, p_2.order))
-            child.computeFitness()
-            mut = mutation_op(child)
-            offspring.append(mut)
-        if parameters.elimination != 'lambdamu':
+            for order in crossover.CSOX(p_1.order,p_2.order).values():
+                # child = CandidateSolution(tsp,standard_alfa=parameters.standard_alfa, order=recombination(p_1.order, p_2.order))
+                child = CandidateSolution(tsp,standard_alfa=parameters.standard_alfa, order=order)
+                child.computeFitness()
+                mut = mutation(child)
+                offspring.append(mut)
+        if parameters.elimination == 'lambda+mu':
         #Mutation of seed population,
             mutated_population = list()
             for ind in population:
-                mut = mutation._op(ind)
+                mut = mutation(ind)
                 mutated_population.append(mut)
             population = mutated_population
          #To make sure that the best solution remains whatever
-        population = elite + elimination_op(population,offspring, len(population)-1)
+        population = elite + elimination_op(population,offspring, n,5)
         
         #Local search best individuals
         if local_search:
-            start_time = time.time()
-            for idx in range(0,1):
+            # start_time = time.time()
+            for idx in range(0,10): #Make the number of LSO vary depending on the problem
                 #The population is sorted, we make local search on the best one
                 LSO(population[idx],tsp)
-            print('Time needed for LSO : %s'%(time.time()-start_time))
+            # print('Time needed for LSO : %s'%(time.time()-start_time))
         return population
 
     def swap_islands(self,island1,island2,indiv_to_swap=5):
@@ -226,24 +230,27 @@ class CandidateSolution:
             current_city = random.randint(0,self.tsp.number_of_cities-1)
             order = [current_city]
             while len(order) < self.tsp.number_of_cities-1:
-                if len(set(self.tsp.valid_transition[current_city])-set(order)) == 0:
-                    last_ten = order[:-10]
-                    order = order[:-10] #Backtrack from two cities
-                    current_city = random.choice([city for city in self.tsp.valid_transition[order[-1]] if city not in order +last_ten])
-                    order.append(current_city)
-                else:
+                # if len(set(self.tsp.valid_transition[current_city])-set(order)) == 0:
+                #     last_ten = order[:-10]
+                #     order = order[:-10] #Backtrack from two cities
+                #     current_city = random.choice([city for city in self.tsp.valid_transition[order[-1]] if city not in order +last_ten])
+                #     order.append(current_city)
+                # else:
                 # choose next_city random
+                if len(set(self.tsp.valid_transition[current_city])-set(order)) == 0:
+                    current_city = random.choice([city for city in range(self.tsp.number_of_cities-1) if city not in order])
+                    order.append(current_city)
+
+                else:
                     current_city = random.choice([city for city in self.tsp.valid_transition[order[-1]] if city not in order])
                     order.append(current_city)     
             remaining_city = [number for number in range(0,self.tsp.number_of_cities) if number not in order]
-            order.append(remaining_city[0])
+            order += remaining_city
 
             self.order = np.array(order)
+            # print(len(self.order))
         else:
             self.order = order
-        # for number in range(self.tsp.number_of_cities):
-        #     assert number in self.order
-
     
     def computeFitness(self):
         #Fitness is a parameter of the class
@@ -262,9 +269,6 @@ class CandidateSolution:
         if math.isinf(last_dist):
             penalty +=1
         distance += last_dist
-        # print(last_dist)
-        # except Exception as e:
-        #     print(self.order)
         
         if math.isinf(distance):
             #Convert infinite to a very large negative number 
@@ -284,40 +288,44 @@ def initialize(tsp, lamda,standard_alfa=0.1):
 """ Heuristically initialize the population """
 @jit
 def heur_initialize(tsp, lamda,standard_alfa=0.1,lower_bound=0.5,upper_bound=0.8,random_share=0.8):
-    print('heuristic initalization')
     population = list()
     n_random = round(lamda * random_share)
-    for i in range(lamda):
-        if i < n_random:  #Make it deterministic instead
+    count = 0
+    while len(population) < lamda:
+        if count < n_random:  #Make it deterministic instead
             #Standard initialization
             indiv = CandidateSolution(tsp,standard_alfa)
+            # count +=1
         else:
             #Greedy initialization
             heur_parameter = random.uniform(lower_bound, upper_bound)  #Generate a different one for each indiv
             current_city = random.randint(0,tsp.number_of_cities-1)
             order = [current_city]
-            while len(order) < tsp.number_of_cities-1:
-
+            timer = time.time()
+            while len(order) < tsp.number_of_cities-1 and time.time() - timer < 10:
+                #Force path to be legal
                 if len(set(tsp.valid_transition[current_city])-set(order)) == 0:
                     last_ten = order[:-10]
                     order = order[:-10] #Backtrack from two cities
                     current_city = random.choice([city for city in tsp.valid_transition[order[-1]] if city not in order +last_ten])
                     order.append(current_city)
-                elif random.uniform(0, 1) > heur_parameter:
+                if random.uniform(0, 1) > heur_parameter:
                     # choose next_city random
                     current_city = random.choice([city for city in tsp.valid_transition[order[-1]] if city not in order])
                     order.append(current_city)
                 else:
                     current_city = min(set(tsp.valid_transition[order[-1]]) - set(order), key=tsp.distance_matrix[current_city].__getitem__)
                     order.append(current_city)
-            remaining_city = [number for number in range(0,tsp.number_of_cities) if number not in order]
-            order.append(remaining_city[0])
-            order = np.array(order)
-            indiv = CandidateSolution(tsp, standard_alfa, order) #0.1
-        #Add the individual to the population
+            if not time.time() - timer > 20:
+                remaining_city = [number for number in range(0,tsp.number_of_cities) if number not in order]
+                order.append(remaining_city[0])
+                order = np.array(order)
+                indiv = CandidateSolution(tsp, standard_alfa, order) #0.1
+                count += 1
+                #Add the individual to the population
         indiv.computeFitness()
         population.append(indiv)
-        print('indiv created')
+            # print('indiv created')
     print('Intial population size %s '%len(population))
     return population
 
@@ -346,7 +354,10 @@ def subpath_cost(order,tsp):
 @jit
 def LSO(indiv,tsp):
     # 2-opt local search
+    start_time = time.time()
     for i in range(1,len(indiv.order)-2):
+        if time.time() -start_time > 10:
+          break
         #quadratic complexity
         for j in range(i+1,len(indiv.order)-1):
             inverted_subpath = indiv.order[i:j+1][::-1]
