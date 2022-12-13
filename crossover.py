@@ -14,7 +14,7 @@ to right according to the order of the sequence to produce an
 offspring.
 """
 #Jonathan : can't we create two offsprings each time? we select the same i and j but inverse the roles of mum and dad for the 2nd one
-def OrderCrossover(mum, dad):
+def OrderCrossover(mum, dad,tsp):
     # Do not change the real dad but take a copy instead
     # print(len(np.unique(dad)))
     # print(len(np.unique(mum)))
@@ -31,9 +31,9 @@ def OrderCrossover(mum, dad):
     for index in range(len(child_order)):
         if child_order[index] == -1:
             child_order[index], dad_copy = dad_copy[0], dad_copy[1:]
-    return child_order
+    return [child_order]
 
-def CycleCrossover(mum, dad):
+def CycleCrossover(mum, dad,tsp):
     #Default is that it may just produce the original one$
     nb_cities = len(mum)
     dad_copy = dad.copy()
@@ -54,10 +54,10 @@ def CycleCrossover(mum, dad):
         if child_order[index] == -1:
             child_order[index], dad_copy = dad_copy[0], dad_copy[1:]
     
-    return child_order
+    return [child_order]
 
 @jit
-def CX2(mum,dad):
+def CX2(mum,dad,tsp):
     nb_cities = len(mum)
     dad_copy = dad.copy()
     child_order = np.array(nb_cities * [-1])
@@ -77,9 +77,9 @@ def CX2(mum,dad):
         if child_order[index] == -1:
             child_order[index], dad_copy = dad_copy[0], dad_copy[1:]
     
-    return child_order
+    return [child_order]
 
-def CSOX(p1,p2):
+def CSOX(p1,p2,tsp):
     offsprings = {}
     nb_cities = len(p2)
     r1 = random.randint(1,nb_cities-4)
@@ -112,7 +112,58 @@ def CSOX(p1,p2):
             # if offsprings[2*i+1][pos2+1:][index] == -1:
             offsprings[2*i+1][index], p2_copy = p2_copy[0], p2_copy[1:]
             offsprings[2*i+2][index], p1_copy = p1_copy[0], p1_copy[1:]    
-    return offsprings
+            
+    return offsprings.values()
+
+
+def SCX(p1,p2,tsp):
+    #Requires the cost matrix, generates one offspring
+    idx = random.choice(range(50))
+    town = p1[idx]
+    order = [town]
+    towns_set = set(range(tsp.number_of_cities))
+    # print(towns_set)
+    for _ in range(tsp.number_of_cities-1):
+    
+        town_pos1 = np.where(p1==town)[0][0]
+        town_pos2 = np.where(p2==town)[0][0]
+        if town_pos1==tsp.number_of_cities-1: #Last index
+            candidate1=p1[0]
+        else:
+            candidate1 = p1[town_pos1+1]  #Next town in p1
+        if town_pos2==tsp.number_of_cities-1: #Last index
+            candidate2=p2[0]
+        else:
+            candidate2 = p2[town_pos2+1]  #Next town in p2
+        if candidate1==candidate2 and not candidate1 in order:
+            #Easiest situation : both lead to the same city
+            town = candidate1
+            order.append(town)
+        else:
+            if not candidate1 in order:
+                cost1 = tsp.distance_matrix[town][candidate1]
+            else:
+                candidate1 = list(towns_set - set(order))[0]
+                cost1 = tsp.distance_matrix[town][candidate1]
+            if not candidate2 in order:
+                cost2 = tsp.distance_matrix[town][candidate2]
+            else:
+                candidate2 = list(towns_set - set(order))[0]
+                cost2 = tsp.distance_matrix[town][candidate2]
+            
+            if cost1 < cost2:
+                town = candidate1
+                order.append(town)
+            else: 
+                town = candidate2
+                order.append(town)
+    order = np.array(order)
+    return [order]
+
+
+
+
+
 
 # mum = np.array([3,5,8,2,1,9,4,6,7])
 # dad = np.array([8,1,5,7,3,4,6,2,9])
