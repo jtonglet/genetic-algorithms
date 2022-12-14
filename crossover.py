@@ -118,7 +118,7 @@ def CSOX(p1,p2,tsp):
 
 def SCX(p1,p2,tsp):
     #Requires the cost matrix, generates one offspring
-    idx = random.choice(range(50))
+    idx = random.choice(range(tsp.number_of_cities))
     town = p1[idx]
     order = [town]
     towns_set = set(range(tsp.number_of_cities))
@@ -131,10 +131,12 @@ def SCX(p1,p2,tsp):
             candidate1=p1[0]
         else:
             candidate1 = p1[town_pos1+1]  #Next town in p1
+            
         if town_pos2==tsp.number_of_cities-1: #Last index
             candidate2=p2[0]
         else:
             candidate2 = p2[town_pos2+1]  #Next town in p2
+
         if candidate1==candidate2 and not candidate1 in order:
             #Easiest situation : both lead to the same city
             town = candidate1
