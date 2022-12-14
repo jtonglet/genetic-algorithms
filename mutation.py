@@ -1,36 +1,42 @@
 import random
 import numpy as np
 
-def swap_mutate(individual):
+def swap_mutate(individual,tsp):
     if random.uniform(0, 1) < individual.alfa:
         # print('swap mutation')
         # Randomly swap elements
-        i = random.randint(0, len(individual.order) - 1)
-        j = random.randint(0, len(individual.order) - 1)
-        city = individual.order[i]
-
-        individual.order[i] = individual.order[j]
-        individual.order[j] = city
+        #Add cgheck that the swap is valid
+        swap_valid=False
+        while not swap_valid:
+            i = random.randint(1, len(individual.order) - 2)
+            j = random.randint(1, len(individual.order) - 2)
+            if individual.order[j] in tsp.valid_transition[individual.order[i-1]] and individual.order[i+1] in tsp.valid_transition[individual.order[j]]:
+                if individual.order[i] in tsp.valid_transition[individual.order[j-1]] and individual.order[j+1] in tsp.valid_transition[individual.order[i]]:
+                    individual.order[i], individual.order[j] = individual.order[j], individual.order[i]
+                    swap_valid=True
     
-    individual.computeFitness()
+    # individual.computeFitness()
     return individual
 
 
-def insert_mutate(individual):
+def insertion_mutate(individual,tsp):
 
     if random.uniform(0,1) < individual.alfa:
-        #print('insert mutation')
-
-        # print('order before insert mutation', individual.order)
-        # Randomly swap elements
-        i = random.randint(0, len(individual.order) - 1)
-        j = random.randint(0, len(individual.order) - 1)
-        smallest_index = min(i, j)
-        city = individual.order.pop(max(i, j))
+        insertion_valid=False
+        while not insertion_valid:
+            i = random.randint(1, len(individual.order) - 2)
+            j = random.randint(1, len(individual.order) - 2)
+            smallest_index = min(i, j)
+            biggest_index = max(i, j)
+            city = individual.order[biggest_index]
+            if individual.order[biggest_index+1] in tsp.valid_transition[individual.order[biggest_index-1]]:
+                if individual.order[smallest_index+1] in tsp.valid_transition[city] and city in tsp.valid_transition[individual.order[smallest_index-1]]:
+                    individual.order = np.delete(individual.order,biggest_index)
         # print('selected', tsp, 'to move next to', individual.order[smallest_index])
-        individual.order = individual.order[:smallest_index] + [city] + individual.order[smallest_index:]
+                    individual.order = np.concatenate((individual.order[:smallest_index], [city], individual.order[smallest_index:]))
+                    insertion_valid=True
 
-        individual.computeFitness()
+        # individual.computeFitness()
     return individual
 
 
@@ -48,11 +54,11 @@ def scramble_mutate(individual):
         random.shuffle(subset)
         subset = np.array(subset)
         individual.order = np.append(individual.order[:smallest_index], np.append(subset,individual.order[biggest_index:]))  
-        individual.computeFitness() 
+        # individual.computeFitness() 
     return individual
 
 
-def inversion_mutate(individual):
+def inversion_mutate(individual,tsp):
     if random.uniform(0, 1) < individual.alfa:
 
         i = random.randint(0, len(individual.order) - 1)
@@ -62,7 +68,7 @@ def inversion_mutate(individual):
         subset = individual.order[smallest_index:biggest_index]
         subset=np.flip(subset).astype('int')
         individual.order = np.append(individual.order[:smallest_index], np.append(subset,individual.order[biggest_index:]))        
-        individual.computeFitness() #Update the fitness of the individual
+        # individual.computeFitness() #Update the fitness of the individual
     return individual
 
 """
