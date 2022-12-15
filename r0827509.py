@@ -249,45 +249,58 @@ def initialize(tsp, lamda,standard_alfa=0.1):
 """ Heuristically initialize the population """
 @jit
 def heur_initialize(tsp, parameters):
-    population = list()
+    random_pop = list()
+    greedy_pop = list()
     n_random = round(parameters.lamda * parameters.random_share)
+    n_greedy = parameters.lamda - n_random
     count = 0
     cities = set(range(0,tsp.number_of_cities))
     taboo = set()
-    while len(population) < parameters.lamda:
-        if count < n_random: 
-            #Standard initialization
-            indiv = CandidateSolution(tsp,parameters)
-            count +=1
-        else:
-            #Greedy initialization
-            heur_parameter = random.uniform(parameters.lower_bound, parameters.upper_bound)
-            current_city = random.choice(list(cities - taboo))
-            taboo.add(current_city)  #Add starting cities to the taboo for the greedy heuristic
-            order = [current_city]
-            timer = time.time()
-            while len(order) < tsp.number_of_cities-1 and time.time() - timer < 10:
-                #Force path to be legal
-                if len(set(tsp.valid_transition[current_city])-set(order)) == 0:
-                    order = order[:-10] 
-                    current_city = random.choice([city for city in tsp.valid_transition[order[-1]] if city not in order])
-                    order.append(current_city)
-                elif random.uniform(0, 1) > heur_parameter:
-                    # choose next_city random
-                    current_city = random.choice([city for city in tsp.valid_transition[order[-1]] if city not in order])
-                    order.append(current_city)
-                else:
-                    current_city = min(set(tsp.valid_transition[order[-1]]) - set(order), key=tsp.distance_matrix[current_city].__getitem__)
-                    order.append(current_city)
-            if not time.time() - timer > 10:
-                remaining_city = [number for number in range(0,tsp.number_of_cities) if number not in order]
-                order.append(remaining_city[0])
-                order = np.array(order)
-                indiv = CandidateSolution(tsp, parameters, order) #0.1
-                count += 1
+    while count < n_random:
+        #Standard initialization
+        indiv = CandidateSolution(tsp,parameters)
+        count +=1
         indiv.computeFitness()
-        population.append(indiv)
-    return population
+        random_pop.append(indiv)
+
+    for _ in range(min(100,tsp.number_of_cities)):
+        # Make up to 100 Greedy initialization, each time with a different starting position
+        heur_parameter = random.uniform(parameters.lower_bound, parameters.upper_bound)
+        current_city = random.choice(list(cities - taboo))
+        # print(current_city)
+        taboo.add(current_city)  #Add starting cities to the taboo for the greedy heuristic
+        order = [current_city]
+        timer = time.time()
+        while len(order) < tsp.number_of_cities-1 and time.time() - timer < 10:
+            #Force path to be legal
+            if len(set(tsp.valid_transition[current_city])-set(order)) == 0:
+                order = order[:-10] 
+                current_city = random.choice([city for city in tsp.valid_transition[order[-1]] if city not in order])
+                order.append(current_city)
+            elif random.uniform(0, 1) > heur_parameter:
+                # choose next_city random --> never happens in practice
+                current_city = random.choice([city for city in tsp.valid_transition[order[-1]] if city not in order])
+                order.append(current_city)
+            else:
+                current_city = min(set(tsp.valid_transition[order[-1]]) - set(order), key=tsp.distance_matrix[current_city].__getitem__)
+                order.append(current_city)
+        if not time.time() - timer > 10:
+            remaining_city = [number for number in range(0,tsp.number_of_cities) if number not in order]
+            order.append(remaining_city[0])
+            order = np.array(order)
+            indiv = CandidateSolution(tsp, parameters, order) #0.1
+            indiv.computeFitness()
+            greedy_pop.append(indiv)
+    
+    print(len(greedy_pop))
+    fitnesses = [indiv.fitness for indiv in greedy_pop]
+    # print(fitnesses)
+    sorted_fitnesses = sorted(fitnesses,reverse=True)
+    # print(sorted_fitnesses)
+    greedy_pop =  [greedy_pop[fitnesses.index(f)]  for f in sorted_fitnesses[:n_greedy]]
+    print(len(greedy_pop))
+        
+    return greedy_pop + random_pop
 
 
 def mean(list):
