@@ -11,14 +11,12 @@ warnings.filterwarnings('ignore')
 
 
 class Parameters:
-    def __init__(self, lamda=100, mu=100, k=10, its=100,lower_bound=1,upper_bound=1,
+    def __init__(self, lamda=100, mu=100, k=10, its=100,
                  standard_alfa=0.3, random_share=0.8,elimination='lambda+musharing',n_LSO=50):
         self.lamda = lamda
         self.its = its
         self.mu = mu
         self.k = k
-        self.lower_bound = lower_bound
-        self.upper_bound = upper_bound
         self.standard_alfa = standard_alfa
         self.random_share = random_share
         self.elimination = elimination
@@ -52,7 +50,8 @@ class r0827509:
             
             start_time = time.time()
             if heuristic:
-                population = heur_initialize(tsp,parameters)
+                random_pop, greedy_pop = heur_initialize(tsp,parameters)
+                population = greedy_pop[:len(greedy_pop)//2]   +  random_pop[:len(random_pop)//2] +  greedy_pop[len(greedy_pop)//2:] +  random_pop[:len(random_pop)//2]
             else:
                 population = initialize(tsp, parameters)
             for idx in range(0,min(parameters.n_LSO,len(population))):
@@ -263,28 +262,23 @@ def heur_initialize(tsp, parameters):
         indiv.computeFitness()
         random_pop.append(indiv)
 
-    for _ in range(min(100,tsp.number_of_cities)):
+    for _ in range(min(250,tsp.number_of_cities)):
         # Make up to 100 Greedy initialization, each time with a different starting position
-        heur_parameter = random.uniform(parameters.lower_bound, parameters.upper_bound)
         current_city = random.choice(list(cities - taboo))
         # print(current_city)
         taboo.add(current_city)  #Add starting cities to the taboo for the greedy heuristic
         order = [current_city]
         timer = time.time()
-        while len(order) < tsp.number_of_cities-1 and time.time() - timer < 10:
+        while len(order) < tsp.number_of_cities-1 and time.time() - timer < 1:
             #Force path to be legal
             if len(set(tsp.valid_transition[current_city])-set(order)) == 0:
                 order = order[:-10] 
                 current_city = random.choice([city for city in tsp.valid_transition[order[-1]] if city not in order])
                 order.append(current_city)
-            elif random.uniform(0, 1) > heur_parameter:
-                # choose next_city random --> never happens in practice
-                current_city = random.choice([city for city in tsp.valid_transition[order[-1]] if city not in order])
-                order.append(current_city)
             else:
                 current_city = min(set(tsp.valid_transition[order[-1]]) - set(order), key=tsp.distance_matrix[current_city].__getitem__)
                 order.append(current_city)
-        if not time.time() - timer > 10:
+        if not time.time() - timer > 1:
             remaining_city = [number for number in range(0,tsp.number_of_cities) if number not in order]
             order.append(remaining_city[0])
             order = np.array(order)
@@ -292,15 +286,12 @@ def heur_initialize(tsp, parameters):
             indiv.computeFitness()
             greedy_pop.append(indiv)
     
-    print(len(greedy_pop))
     fitnesses = [indiv.fitness for indiv in greedy_pop]
     # print(fitnesses)
     sorted_fitnesses = sorted(fitnesses,reverse=True)
     # print(sorted_fitnesses)
-    greedy_pop =  [greedy_pop[fitnesses.index(f)]  for f in sorted_fitnesses[:n_greedy]]
-    print(len(greedy_pop))
-        
-    return greedy_pop + random_pop
+    greedy_pop =  [greedy_pop[fitnesses.index(f)]  for f in sorted_fitnesses[:n_greedy]]        
+    return random_pop, greedy_pop
 
 
 def mean(list):
