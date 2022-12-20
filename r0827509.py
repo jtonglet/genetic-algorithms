@@ -22,7 +22,7 @@ class Parameters:
         n_swap (int) : number of individuals to swap between islands during the island swap rounds
 
     '''
-    def __init__(self, lamda=20, mu=50, k=5, its=100, standard_alfa=0.3, random_share=0.8,elimination='lambda+musharing',n_LSO=20,n_swap=5):
+    def __init__(self, lamda=50, mu=125, k=15, its=100, standard_alfa=0.3, random_share=0.8,elimination='lambda+musharing',n_LSO=20,n_swap=5):
         self.lamda = lamda
         self.its = its
         self.mu = mu
@@ -60,8 +60,9 @@ class r0827509:
         yourConvergenceTestsHere = True
 
         #Graph plotting data
-        bests = []
-        means = []
+        df_data = []
+        type = []
+        iteration = []
 
         while( yourConvergenceTestsHere):
             ##################
@@ -77,9 +78,10 @@ class r0827509:
             # Evaluate fitness and report
             fitnesses = [indiv.fitness for indiv in population]
             bestObjective = max(fitnesses)
-            bests.append(bestObjective)
             meanObjective=  mean(fitnesses)
-            means.append(meanObjective)
+            df_data += [-bestObjective,-meanObjective]
+            type += ['best','mean']
+            iteration+= [0,0]
             print(0, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
             print('Time needed to initialize the population : %s seconds'%(time.time()-start_time))
 
@@ -95,6 +97,8 @@ class r0827509:
             #############
             same_best_counter = 0
             for i in range(1, parameters.its+1): 
+                #Control iteration execution time
+                iter_start_time = time.time()
                 #Every 3 iterations, perform a swap of individuals between the islands
                 if i%3==0:
                     island1, island2 = self.swap_islands(island1,island2,parameters)
@@ -109,18 +113,22 @@ class r0827509:
                     same_best_counter +=1
                 else:
                     same_best_counter=0
+                #Report results
                 bestObjective = max(fitnesses)
-                bests.append(bestObjective)
                 bestSolution = population[fitnesses.index(bestObjective)]
                 meanObjective = mean(fitnesses)
-                means.append(meanObjective)
+                df_data += [-bestObjective,-meanObjective]
+                type += ['best','mean']
+                iteration += [i,i]
                 #Print intermediate results
-                # print(i, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
+                print(i, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
                 #Evaluate the time remaining
                 timeLeft = self.reporter.report(meanObjective, bestObjective, np.array(bestSolution.order))
-                if timeLeft < 0:
-                    #No time left
+                iter_duration = time.time()-iter_start_time
+                if timeLeft < iter_duration * 1.1:
+                    #The remaining time is lower than the execution time of the last iteration (+a 10% margin)
                     print('No time left')
+                    print('Elapsed time : %s seconds'%(time.time()-start_time))
                     print('Current iter %s'%i)
                     print('Results after timeout')
                     print(i, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
@@ -130,8 +138,11 @@ class r0827509:
                 if same_best_counter>=50:
                     #Not enough improvements after 50 iterations
                     print('Same best for 50 iterations')
+                    print('Elapsed time : %s seconds'%(time.time()-start_time))
                     finalFitness = bestObjective
                     finalMeanFitness = meanObjective
+                    print(i, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
+                    
                     break
                 if i == parameters.its:
                     #Maximum number of iterations reached
@@ -146,8 +157,8 @@ class r0827509:
             yourConvergenceTestsHere = False
 
             if to_csv:
-                results_df = pd.DataFrame({'best':bests,
-                                           'mean':means})
+                results_df = pd.DataFrame({'iteration':iteration,'fitness':df_data,
+                                           'type':type})
                 results_df.to_csv('results_'+filename,index=False)
         return finalFitness, finalMeanFitness
 
@@ -171,13 +182,6 @@ class r0827509:
                             }
         elimination_op = elimination_dict[parameters.elimination]
         offspring = list()
-        if elitism:
-            #Save the best individual and remove it from the population
-            elite = elimination(population,offspring,1) 
-            population.remove(elite[0])
-            # print(elite[0].fitness)
-        else:
-            elite = []
         for _ in range(1, parameters.mu):   
             #Select parents and generate offsprings
             p_1 = selection(population, parameters.k)
@@ -190,6 +194,13 @@ class r0827509:
                 #Compute the fitness of the offsprings
                 child.computeFitness()
                 offspring.append(child)
+        if elitism:
+            #Save the best individual and remove it from the population  #Should still be used to generate the offsprings first
+            elite = elimination(population,[],1) 
+            population.remove(elite[0])
+            # print(elite[0].fitness)
+        else:
+            elite = []
         mutated_population = list()
         for ind in population:
             for mut_op in mutation:
