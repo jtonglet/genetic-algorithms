@@ -10,7 +10,7 @@ warnings.filterwarnings('ignore')
 
 class Parameters:
     '''
-    Abstract to store all modifiable parameters of the genetic algorithm.
+    Abstract class to store all modifiable parameters of the genetic algorithm.
     Params:
         lamda (int) : population size
         mu (int) : number of offsprings to generate per island per iteration
@@ -20,9 +20,8 @@ class Parameters:
         elimination (str) : elimination strategy. 'lambda+mu' or 'lambda+musharing'
         n_LSO (int) : number of individuals to improve with local search per iteration
         n_swap (int) : number of individuals to swap between islands during the island swap rounds
-
     '''
-    def __init__(self, lamda=50, mu=125, k=15, its=100, standard_alfa=0.3, random_share=0.8,elimination='lambda+musharing',n_LSO=20,n_swap=5):
+    def __init__(self, lamda=50, mu=125, k=15, its=200, standard_alfa=0.3, random_share=0.8,elimination='lambda+musharing',n_LSO=20,n_swap=5,shape=1):
         self.lamda = lamda
         self.its = its
         self.mu = mu
@@ -32,6 +31,7 @@ class Parameters:
         self.elimination = elimination
         self.n_LSO = n_LSO
         self.n_swap = n_swap
+        self.shape = shape
 
 class r0827509:
     '''
@@ -52,6 +52,7 @@ class r0827509:
         Params : 
             filename (str): name of the file containing the tsp distance matrix
             parameters (Parameters) : the parameters of the algorithm
+            to_csv (bool) : store the execution data as a csv file
         '''
         file = open(filename)
         distanceMatrix = np.loadtxt(file, delimiter=",")
@@ -59,16 +60,13 @@ class r0827509:
         tsp = TravellingSalesmanProblem(distanceMatrix)
         yourConvergenceTestsHere = True
 
-        #Graph plotting data
+        #Data to store
         df_data = []
         type = []
         iteration = []
 
         while( yourConvergenceTestsHere):
-            ##################
-            # Initialization #
-            ##################
-            
+            # Initialization 
             start_time = time.time()
             random_pop, greedy_pop = heur_initialize(tsp,parameters)
             population = greedy_pop[:len(greedy_pop)//2] + random_pop[:len(random_pop)//2] + greedy_pop[len(greedy_pop)//2:] + random_pop[:len(random_pop)//2]
@@ -84,17 +82,12 @@ class r0827509:
             iteration+= [0,0]
             print(0, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
             print('Time needed to initialize the population : %s seconds'%(time.time()-start_time))
-
-            ##################
-            # Create islands #
-            ##################
+            #Create islands
             half_pop = round(len(population)/2)
             island1 = population[:half_pop]
             island2 = population[half_pop:]
 
-            #############
-            # Main loop #
-            #############
+            #Main loop
             same_best_counter = 0
             for i in range(1, parameters.its+1): 
                 #Control iteration execution time
@@ -106,6 +99,8 @@ class r0827509:
                 island1 = self.create_new_generation(tsp,island1,parameters,[swap_mutate,insertion_mutate], OrderCrossover)
                 island2 = self.create_new_generation(tsp,island2,parameters,[swap_mutate,insertion_mutate], CSOX)
                 population = island1 + island2
+                #Update the mutation probability and the shape coefficient for fitness sharing
+                parameters.shape-= 0.2*parameters.shape 
                 # Evaluate fitness and reporting
                 fitnesses = [indiv.fitness for indiv in population]
                 #Report whether the best objective has changed or not
@@ -126,7 +121,7 @@ class r0827509:
                 timeLeft = self.reporter.report(meanObjective, bestObjective, np.array(bestSolution.order))
                 iter_duration = time.time()-iter_start_time
                 if timeLeft < iter_duration * 1.1:
-                    #The remaining time is lower than the execution time of the last iteration (+a 10% margin)
+                    #The remaining time is lower than the execution time of the last iteration (+ 10% margin)
                     print('No time left')
                     print('Elapsed time : %s seconds'%(time.time()-start_time))
                     print('Current iter %s'%i)
@@ -157,6 +152,7 @@ class r0827509:
             yourConvergenceTestsHere = False
 
             if to_csv:
+                #Export execution results as csv
                 results_df = pd.DataFrame({'iteration':iteration,'fitness':df_data,
                                            'type':type})
                 results_df.to_csv('results_'+filename,index=False)
@@ -195,10 +191,9 @@ class r0827509:
                 child.computeFitness()
                 offspring.append(child)
         if elitism:
-            #Save the best individual and remove it from the population  #Should still be used to generate the offsprings first
+            #Save the best individual and remove it from the population
             elite = elimination(population,[],1) 
             population.remove(elite[0])
-            # print(elite[0].fitness)
         else:
             elite = []
         mutated_population = list()
@@ -210,8 +205,7 @@ class r0827509:
             mutated_population.append(ind)
         population = mutated_population
         #Perform elimination
-        population = [elite[0]] + elimination_op(population,offspring, len(population))
-        # print(population[0].fitness)
+        population = [elite[0]] + elimination_op(population,offspring, len(population),parameters.shape)
         #Local search on best individuals
         for idx in range(0,min(parameters.n_LSO,len(population))):
             LSO(population[idx])
@@ -258,7 +252,7 @@ class CandidateSolution:
         order (numpy.array) : the representation of the solution as a sequence of cities
         alfa (float) : the mutation probability
     '''
-    @jit
+    # @jit
     def __init__(self, tsp, order=None):
         self.age=0
         self.tsp = tsp
@@ -288,7 +282,7 @@ class CandidateSolution:
             distance =  1e10
         self.fitness = -distance  - (penalty * 1e3)
 
-@jit
+# @jit
 def heur_initialize(tsp, parameters):
     #Heuristic initialization of the population
     random_pop = list()
@@ -311,7 +305,7 @@ def heur_initialize(tsp, parameters):
         order = [current_city]
         timer = time.time()
         #A maximum of two seconds is allowed to find an individual
-        while len(order) < tsp.number_of_cities-1 and time.time() - timer < 2:
+        while len(order) < tsp.number_of_cities-1 and time.time() - timer < 0.5:
             #If no remaining alternatives, backtrack 10 cities earlier and pick a random city among the available options
             if len(set(tsp.valid_transition[current_city])-set(order)) == 0:
                 order = order[:-10] 
@@ -321,7 +315,7 @@ def heur_initialize(tsp, parameters):
             #Append the cheapest valid transition to the order
                 current_city = min(set(tsp.valid_transition[order[-1]]) - set(order), key=tsp.distance_matrix[current_city].__getitem__)
                 order.append(current_city)
-        if not time.time() - timer > 2:
+        if not time.time() - timer > 0.5:
             remaining_city = [number for number in range(0,tsp.number_of_cities) if number not in order]
             order.append(remaining_city[0])
             order = np.array(order)
@@ -339,7 +333,7 @@ def heur_initialize(tsp, parameters):
 def mean(list):
     return sum(list)/len(list)
 
-@jit
+# @jit
 def LSO(indiv):
     # 2-opt local search operator
     start_time = time.time()
@@ -397,7 +391,6 @@ def LSO(indiv):
     indiv.computeFitness()
 
 
-
 def selection(population, k):
     # k-tournament selection 
     selected = random.sample(population, k)
@@ -425,7 +418,7 @@ def hamming_distance(ind1,new_generation):
     return dists
     
     
-def sort_according_to_shared_fitnesses(offspring,new_generation,sigma,alpha=1):
+def sort_according_to_shared_fitnesses(offspring,new_generation,sigma,shape=1):
     #Sort individuals in decreasing order based on their shared fitness value
     for o in range(len(offspring)):
         dists = hamming_distance(offspring[o].order,new_generation)
@@ -433,7 +426,7 @@ def sort_according_to_shared_fitnesses(offspring,new_generation,sigma,alpha=1):
         for d in dists:
             #Update onePlusBeta value if distance inferior to sigma threshold
             if d <= sigma:
-                onePlusBeta += 1 - (d/sigma)**alpha
+                onePlusBeta += 1 - (d/sigma)**shape
         offspring[o].shared_fitness = offspring[o].fitness * onePlusBeta  #Add  onePlusBeta penalty to fitness
         if o!= len(offspring)-1:
             if offspring[o].shared_fitness > offspring[o+1].shared_fitness: 
@@ -447,21 +440,21 @@ def elimination(population, offspring, lamda):
     order = sort_according_to_fitnesses(order)
     return order[0:lamda]
 
-def elimination_fitness_sharing(population,offspring,lamda):
+def elimination_fitness_sharing(population,offspring,lamda,shape=1):
     #Apply fitness sharing based on already selected individuals
     new_pop = []
     #First iteration
     sigma_dict = {50:15,100:30,250:75,500:150,750:225,1000:300}
     sigma =sigma_dict[len(population[0].order)] 
     sorted = offspring+population
-    sorted = [i for i in sorted if i.age <=5]  #Age based elimination
+    # sorted = [i for i in sorted if i.age <=5]  #Age based elimination
     sorted = sort_according_to_shared_fitnesses(sorted,new_pop,sigma)
     new_pop.append(sorted[0])
     sorted[0].age += 1
     sorted = sorted[1:] #Remove the selected offsprings
     #Mail loop
     while len(new_pop) < lamda:
-        sorted = sort_according_to_shared_fitnesses(sorted,new_pop,sigma)
+        sorted = sort_according_to_shared_fitnesses(sorted,new_pop,sigma,shape)
         new_pop.append(sorted[0])
         sorted[0].age +=1
         sorted = sorted[1:] #Remove the selected offspring
@@ -516,8 +509,6 @@ def inversion_mutate(individual,parameters):
 
 
 def OrderCrossover(mum, dad):
-    '''
-    '''
     dad_copy = dad.copy()
     nb_cities = len(mum)
     i = random.randint(0,nb_cities-1)
@@ -534,8 +525,6 @@ def OrderCrossover(mum, dad):
     return [child_order]
 
 def CycleCrossover(mum, dad):
-    '''
-    '''
     nb_cities = len(mum)
     dad_copy = dad.copy()
     child_order = np.array(nb_cities * [-1])
@@ -558,34 +547,7 @@ def CycleCrossover(mum, dad):
     return [child_order]
 
 
-def CX2(mum,dad):
-    '''
-    '''
-    nb_cities = len(mum)
-    dad_copy = dad.copy()
-    child_order = np.array(nb_cities * [-1])
-    idx = random.randint(0,nb_cities-1)
-    child_order[idx] = mum[idx]
-    no_cycle=True
-    while no_cycle:
-        new_city = dad[np.where(mum==dad[idx])[0]]
-        idx = np.where(mum==dad[np.where(mum ==dad[idx])[0]])[0]
-        if new_city in child_order:
-            no_cycle =False
-        else:
-            child_order[idx] = new_city
-    dad_copy=np.array([elem for elem in dad_copy if elem not in child_order],dtype="int")
-    for index in range(len(child_order)):
-        if child_order[index] == -1:
-            child_order[index], dad_copy = dad_copy[0], dad_copy[1:]
-    
-    return [child_order]
-
 def CSOX(p1,p2):
-    '''
-    Variant of the ordered crossover which generates 6 offsprings for each pair of parents.
-    Source : 
-    '''
     offsprings = {}
     nb_cities = len(p2)
     r1 = random.randint(1,nb_cities-4)
