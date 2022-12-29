@@ -10,7 +10,7 @@ warnings.filterwarnings('ignore')
 class Parameters:
     '''
     Abstract class to store all modifiable parameters of the genetic algorithm.
-    Params:
+    Attributes:
         lamda (int) : population size
         mu (int) : number of offsprings to generate per island per iteration
         k (int) : k value in k tournament selection
@@ -35,7 +35,7 @@ class Parameters:
 class r0827509:
     '''
     Main class to run the genetic algorithm.
-    Params :
+    Attributes :
         reporter (Reporter) : reporter object to evaluate the remaining time and store fitness values in a csv file
     '''
 
@@ -224,7 +224,7 @@ class r0827509:
 class TravellingSalesmanProblem:
     '''
     A traveling salesman problem.
-    Params:
+    Attributes:
         number_of_cities (int) : the number of cities in the tsp
         valid_transition (dict) : takes as key an origin city and as values a list of all the valid destination cities
         distance_matrix (dict) : nested dictionary containing the distances between cities
@@ -244,15 +244,14 @@ class TravellingSalesmanProblem:
 class CandidateSolution:
     '''
     An individual representing a possible solution for the travelling salesman problem.
-    Params:
+    Attributes:
         tsp (TravellingSalesmanProblem) : an instance of a tsp problem
-        age (int) : the number of iterations for which the individual has been in the population. 
-                    An individual older than 5 is removed by elimination operators
         order (numpy.array) : the representation of the solution as a sequence of cities
         alfa (float) : the mutation probability
+        fitness (int): fitness value of the individual
+        shared_fitness (int): shared fitness value of the individual, based on its neighborhood
     '''
     def __init__(self, tsp, order=None):
-        self.age=0
         self.tsp = tsp
         self.shared_fitness = 0
         if order is None:
@@ -281,7 +280,7 @@ class CandidateSolution:
         self.fitness = -distance  - (penalty * 1e3)
 
 
-def heur_initialize(tsp, parameters):
+def heur_initialize(tsp, parameters,time_out_it=0.5):
     #Heuristic initialization of the population
     random_pop = list()
     greedy_pop = list()
@@ -296,6 +295,7 @@ def heur_initialize(tsp, parameters):
         random_pop.append(indiv)   
     cities = set(range(0,tsp.number_of_cities))
     taboo = set()
+
     for _ in range(min(250,tsp.number_of_cities)):
         #Up to 250 greedy initialization, each time with a different starting position
         current_city = random.choice(list(cities - taboo))
@@ -303,7 +303,7 @@ def heur_initialize(tsp, parameters):
         order = [current_city]
         timer = time.time()
         #A maximum of two seconds is allowed to find an individual
-        while len(order) < tsp.number_of_cities-1 and time.time() - timer < 0.5:
+        while len(order) < tsp.number_of_cities-1 and time.time() - timer < time_out_it:
             #If no remaining alternatives, backtrack 10 cities earlier and pick a random city among the available options
             if len(set(tsp.valid_transition[current_city])-set(order)) == 0:
                 order = order[:-10] 
@@ -313,7 +313,7 @@ def heur_initialize(tsp, parameters):
             #Append the cheapest valid transition to the order
                 current_city = min(set(tsp.valid_transition[order[-1]]) - set(order), key=tsp.distance_matrix[current_city].__getitem__)
                 order.append(current_city)
-        if not time.time() - timer > 0.5:
+        if not time.time() - timer > time_out_it:
             remaining_city = [number for number in range(0,tsp.number_of_cities) if number not in order]
             order.append(remaining_city[0])
             order = np.array(order)
@@ -407,6 +407,7 @@ def hamming_distance(ind1,new_generation):
     for ind2 in new_generation:
         town_start = ind1[0]
         idx_start_2 = np.where(ind2.order==town_start)[0][0]
+        #Sort the second individual to make them start from the same town
         sorted_ind2 = np.concatenate((ind2.order[idx_start_2:],ind2.order[:idx_start_2]))
         dist = 0
         for i in range(len(ind1)):
@@ -447,13 +448,11 @@ def elimination_fitness_sharing(population,offspring,lamda,shape=1):
     sorted = offspring+population
     sorted = sort_according_to_shared_fitnesses(sorted,new_pop,sigma)
     new_pop.append(sorted[0])
-    sorted[0].age += 1
     sorted = sorted[1:] #Remove the selected offsprings
     #Mail loop
     while len(new_pop) < lamda:
         sorted = sort_according_to_shared_fitnesses(sorted,new_pop,sigma,shape)
         new_pop.append(sorted[0])
-        sorted[0].age +=1
         sorted = sorted[1:] #Remove the selected offspring
     
     return new_pop
