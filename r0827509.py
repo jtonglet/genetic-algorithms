@@ -4,7 +4,6 @@ import pandas as pd
 import random
 import math
 import time
-from numba import jit
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -252,7 +251,6 @@ class CandidateSolution:
         order (numpy.array) : the representation of the solution as a sequence of cities
         alfa (float) : the mutation probability
     '''
-    # @jit
     def __init__(self, tsp, order=None):
         self.age=0
         self.tsp = tsp
@@ -282,7 +280,7 @@ class CandidateSolution:
             distance =  1e10
         self.fitness = -distance  - (penalty * 1e3)
 
-# @jit
+
 def heur_initialize(tsp, parameters):
     #Heuristic initialization of the population
     random_pop = list()
@@ -333,7 +331,7 @@ def heur_initialize(tsp, parameters):
 def mean(list):
     return sum(list)/len(list)
 
-# @jit
+
 def LSO(indiv):
     # 2-opt local search operator
     start_time = time.time()
@@ -430,7 +428,7 @@ def sort_according_to_shared_fitnesses(offspring,new_generation,sigma,shape=1):
         offspring[o].shared_fitness = offspring[o].fitness * onePlusBeta  #Add  onePlusBeta penalty to fitness
         if o!= len(offspring)-1:
             if offspring[o].shared_fitness > offspring[o+1].shared_fitness: 
-                #Early stopping : shared fitness can only decrease. if indiv i remains better than i+1 after update, there is no need in computing the next values
+                #Early stopping
                 break 
     return sorted(offspring, key=lambda sol: sol.shared_fitness, reverse=True)
 
@@ -447,7 +445,6 @@ def elimination_fitness_sharing(population,offspring,lamda,shape=1):
     sigma_dict = {50:15,100:30,250:75,500:150,750:225,1000:300}
     sigma =sigma_dict[len(population[0].order)] 
     sorted = offspring+population
-    # sorted = [i for i in sorted if i.age <=5]  #Age based elimination
     sorted = sort_according_to_shared_fitnesses(sorted,new_pop,sigma)
     new_pop.append(sorted[0])
     sorted[0].age += 1
@@ -494,6 +491,7 @@ def insertion_mutate(individual,parameters):
                     individual.order = np.concatenate((individual.order[:smallest_index], [city], individual.order[smallest_index:]))
                     insertion_valid=True
     return individual
+
 
 def inversion_mutate(individual,parameters):
     #Invert a subpath
