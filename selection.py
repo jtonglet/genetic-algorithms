@@ -1,6 +1,5 @@
 import random
 import numpy as np
-from scipy.spatial.distance import hamming
 from numba import jit
 import time
 
