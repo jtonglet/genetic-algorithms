@@ -1,6 +1,5 @@
 import Reporter
 import numpy as np
-import pandas as pd
 import random
 import math
 import time
@@ -43,27 +42,22 @@ class r0827509:
         self.reporter = Reporter.Reporter(self.__class__.__name__)
         
     def optimize(self, 
-                 filename,
-                 parameters = Parameters(),
-                 to_csv=True):
+                 filename):
         '''
         Execute the genetic algorithm on a given tsp problem.
         Params : 
             filename (str): name of the file containing the tsp distance matrix
-            parameters (Parameters) : the parameters of the algorithm
-            to_csv (bool) : store the execution data as a csv file
+        Returns:
+            finalFitness (float) : the best distance found for the tour (negative value)
+            finalMeanFitness (float) : the mean distance in the population at the end of the execution (negative value)
         '''
         file = open(filename)
         distanceMatrix = np.loadtxt(file, delimiter=",")
         file.close()
         tsp = TravellingSalesmanProblem(distanceMatrix)
+        #Initialize the parameters
+        parameters = Parameters()
         yourConvergenceTestsHere = True
-
-        #Data to store
-        df_data = []
-        type = []
-        iteration = []
-
         while( yourConvergenceTestsHere):
             # Initialization 
             start_time = time.time()
@@ -76,10 +70,7 @@ class r0827509:
             fitnesses = [indiv.fitness for indiv in population]
             bestObjective = max(fitnesses)
             meanObjective=  mean(fitnesses)
-            df_data += [-bestObjective,-meanObjective]
-            type += ['best','mean']
-            iteration+= [0,0]
-            print(0, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
+            print(0, ": Mean fitness = ", -meanObjective, "\t Best fitness = ", -bestObjective)
             print('Time needed to initialize the population : %s seconds'%(time.time()-start_time))
             #Create islands
             half_pop = round(len(population)/2)
@@ -111,13 +102,20 @@ class r0827509:
                 bestObjective = max(fitnesses)
                 bestSolution = population[fitnesses.index(bestObjective)]
                 meanObjective = mean(fitnesses)
-                df_data += [-bestObjective,-meanObjective]
-                type += ['best','mean']
-                iteration += [i,i]
                 #Print intermediate results
-                print(i, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
+                print(i, ": Mean fitness = ", -meanObjective, "\t Best fitness = ", -bestObjective)
                 #Evaluate the time remaining
-                timeLeft = self.reporter.report(meanObjective, bestObjective, np.array(bestSolution.order))
+                timeLeft = self.reporter.report(-meanObjective, -bestObjective, np.array(bestSolution.order))
+                if timeLeft < 0 :
+                    print('No time left')
+                    print('Elapsed time : %s seconds'%(time.time()-start_time))
+                    print('Current iter %s'%i)
+                    print('Results after timeout')
+                    print(i, ": Mean fitness = ", -meanObjective, "\t Best fitness = ", -bestObjective)
+                    finalFitness = -bestObjective
+                    finalMeanFitness = -meanObjective
+                    break
+                #Additional condition to break before the time limit with a 10% margin
                 iter_duration = time.time()-iter_start_time
                 if timeLeft < iter_duration * 1.1:
                     #The remaining time is lower than the execution time of the last iteration (+ 10% margin)
@@ -125,42 +123,38 @@ class r0827509:
                     print('Elapsed time : %s seconds'%(time.time()-start_time))
                     print('Current iter %s'%i)
                     print('Results after timeout')
-                    print(i, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
-                    finalFitness = bestObjective
-                    finalMeanFitness = meanObjective
+                    print(i, ": Mean fitness = ", -meanObjective, "\t Best fitness = ", -bestObjective)
+                    finalFitness = -bestObjective
+                    finalMeanFitness = -meanObjective
                     break
                 if same_best_counter>=50:
                     #Not enough improvements after 50 iterations
                     print('Same best for 50 iterations')
                     print('Elapsed time : %s seconds'%(time.time()-start_time))
-                    finalFitness = bestObjective
-                    finalMeanFitness = meanObjective
-                    print(i, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)
-                    
+                    finalFitness = -bestObjective
+                    finalMeanFitness = -meanObjective
+                    print(i, ": Mean fitness = ", -meanObjective, "\t Best fitness = ", -bestObjective)
                     break
                 if i == parameters.its:
                     #Maximum number of iterations reached
                     print('Optimization finished')
                     print('Elapsed time : %s seconds'%(time.time()-start_time))
                     print('Results after all iterations')
-                    print(i, ": Mean fitness = ", meanObjective, "\t Best fitness = ", bestObjective)  
-                    finalFitness = bestObjective
-                    finalMeanFitness = meanObjective
+                    print(i, ": Mean fitness = ", -meanObjective, "\t Best fitness = ", -bestObjective)  
+                    finalFitness = -bestObjective
+                    finalMeanFitness = -meanObjective
                     break
             
             yourConvergenceTestsHere = False
+            finalFitness = -bestObjective
+            finalMeanFitness = -meanObjective
 
-            if to_csv:
-                #Export execution results as csv
-                results_df = pd.DataFrame({'iteration':iteration,'fitness':df_data,
-                                           'type':type})
-                results_df.to_csv('results_'+filename,index=False)
         return finalFitness, finalMeanFitness
 
     
     def create_new_generation(self,tsp,population,parameters,mutation,recombination,elitism = True):
         """
-        Updates a population using recombination, mutation, local search, and elimination operators.
+        Updates a population using selection, recombination, mutation, local search, and elimination operators.
         Params:
             tsp (TravelingSalesmanProblem) : a tsp problem
             population (list[CandidateSolutions]) : a list of individuals to update
@@ -195,10 +189,10 @@ class r0827509:
             population.remove(elite[0])
         else:
             elite = []
+        #Mutation of the seed population
         mutated_population = list()
         for ind in population:
             for mut_op in mutation:
-                #Mutation of the seed population
                 ind = mut_op(ind,parameters)
             ind.computeFitness()
             mutated_population.append(ind)
@@ -299,10 +293,9 @@ def heur_initialize(tsp, parameters,time_out_it=0.5):
     for _ in range(min(250,tsp.number_of_cities)):
         #Up to 250 greedy initialization, each time with a different starting position
         current_city = random.choice(list(cities - taboo))
-        taboo.add(current_city)
+        taboo.add(current_city) #The taboo keeps track of used starting positions
         order = [current_city]
         timer = time.time()
-        #A maximum of two seconds is allowed to find an individual
         while len(order) < tsp.number_of_cities-1 and time.time() - timer < time_out_it:
             #If no remaining alternatives, backtrack 10 cities earlier and pick a random city among the available options
             if len(set(tsp.valid_transition[current_city])-set(order)) == 0:
@@ -370,7 +363,7 @@ def LSO(indiv):
                     indiv.order[i:j+1] = inverted_subpath
             else:
                 break
-    
+    #Last case : the subpath covers the end and the start of the order
     subpath_cost=0
     inverted_subpath_cost=0
     for j in range(0,len(indiv.order)-2):
@@ -388,6 +381,7 @@ def LSO(indiv):
             break   
     indiv.computeFitness()
 
+#Selection operators
 
 def selection(population, k):
     # k-tournament selection 
@@ -395,6 +389,7 @@ def selection(population, k):
     fitnesses = [indiv.fitness for indiv in selected] 
     return selected[fitnesses.index(max(fitnesses))]
 
+#Elimination operators
 
 def sort_according_to_fitnesses(candidate_solutions_list):
     #Sort individuals by decreasing order based on their fitness
@@ -418,7 +413,14 @@ def hamming_distance(ind1,new_generation):
     
     
 def sort_according_to_shared_fitnesses(offspring,new_generation,sigma,shape=1):
-    #Sort individuals in decreasing order based on their shared fitness value
+    '''
+    Sort individuals in decreasing order based on their shared fitness value
+    Params:
+        offspring (list) : list of offspring to sort according to their shared fitness
+        new_generation (list) : the list of individuals already promoted to the next generation
+        sigma (int) : threshold for a solution to be considered in the neighborhood of another, based on hamming distance
+        shape (int) : shape coefficient for the calculation of the shared fitness
+    '''
     for o in range(len(offspring)):
         dists = hamming_distance(offspring[o].order,new_generation)
         onePlusBeta = 1
@@ -440,11 +442,20 @@ def elimination(population, offspring, lamda):
     return order[0:lamda]
 
 def elimination_fitness_sharing(population,offspring,lamda,shape=1):
-    #Apply fitness sharing based on already selected individuals
+    '''
+    Lambda + mu elimination with fitness sharing. One individual is added to the new generation per iteration.
+    Params:
+        population (list) : list of the parents
+        offspring (list) : list of the offsprings
+        lamda (int) : desired size for the new generation. Should be smaller or equal to len(offspring+population)
+        shape (int) : shape coefficient for fitness sharing
+    Returns : 
+        new_pop (list) : the new generation of individuals
+    '''
     new_pop = []
     #First iteration
-    sigma_dict = {50:15,100:30,250:75,500:150,750:225,1000:300}
-    sigma =sigma_dict[len(population[0].order)] 
+    #Sigma is 30% of the size of the problem
+    sigma =0.3*len(population[0].order)
     sorted = offspring+population
     sorted = sort_according_to_shared_fitnesses(sorted,new_pop,sigma)
     new_pop.append(sorted[0])
@@ -452,11 +463,13 @@ def elimination_fitness_sharing(population,offspring,lamda,shape=1):
     #Mail loop
     while len(new_pop) < lamda:
         sorted = sort_according_to_shared_fitnesses(sorted,new_pop,sigma,shape)
+        #Append the individual with the highest shared fitness
         new_pop.append(sorted[0])
-        sorted = sorted[1:] #Remove the selected offspring
-    
+        sorted = sorted[1:] #Remove the selected individual from the candidate pool
     return new_pop
 
+
+# Mutation operators
 
 def swap_mutate(individual,parameters):
     #Swap the positions of two cities, if it results in valid transitions
@@ -493,7 +506,7 @@ def insertion_mutate(individual,parameters):
 
 
 def inversion_mutate(individual,parameters):
-    #Invert a subpath
+    #Invert a subpath, not used in the final version
     if random.uniform(0, 1) < parameters.standard_alfa:
         i = random.randint(0, len(individual.order) - 1)
         j = random.randint(0, len(individual.order) - 1)
@@ -504,8 +517,10 @@ def inversion_mutate(individual,parameters):
         individual.order = np.append(individual.order[:smallest_index], np.append(subset,individual.order[biggest_index:]))        
     return individual
 
+#Recombination operators
 
 def OrderCrossover(mum, dad):
+    #Generate 1 offspring from 2 parents with the order crossover operator
     dad_copy = dad.copy()
     nb_cities = len(mum)
     i = random.randint(0,nb_cities-1)
@@ -522,6 +537,8 @@ def OrderCrossover(mum, dad):
     return [child_order]
 
 def CycleCrossover(mum, dad):
+    #Generate 1 offspring from 2 parents with the cycle crossover
+    #Not used in the final version of the algorithm
     nb_cities = len(mum)
     dad_copy = dad.copy()
     child_order = np.array(nb_cities * [-1])
@@ -545,6 +562,7 @@ def CycleCrossover(mum, dad):
 
 
 def CSOX(p1,p2):
+    #Generate 6 offsprings from 2 parents using the CSOX algorithm
     offsprings = {}
     nb_cities = len(p2)
     r1 = random.randint(1,nb_cities-4)
@@ -558,7 +576,6 @@ def CSOX(p1,p2):
             pos1,pos2=0,r1
         else:
             pos1,pos2=r2+1,nb_cities-1
-        
         offsprings[2*i+1],offsprings[2*i+2] = np.array(nb_cities * [-1]),np.array(nb_cities * [-1])
         offsprings[2*i+1][pos1:pos2+1] = p1[pos1:pos2+1]
         offsprings[2*i+2][pos1:pos2+1] = p2[pos1:pos2+1]
@@ -570,6 +587,5 @@ def CSOX(p1,p2):
             offsprings[2*i+2][index], p1_copy = p1_copy[0], p1_copy[1:]
         for index in range(pos1):
             offsprings[2*i+1][index], p2_copy = p2_copy[0], p2_copy[1:]
-            offsprings[2*i+2][index], p1_copy = p1_copy[0], p1_copy[1:]    
-            
+            offsprings[2*i+2][index], p1_copy = p1_copy[0], p1_copy[1:]         
     return offsprings.values()
