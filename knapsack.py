@@ -4,9 +4,6 @@ A basic genetic algorithm for solving the binary KnapSack Problem
 from numba import jit
 import numpy as np
 import random
-#from recombination import CrossOverMethodX
-
-
 
 class KnapSack:
     '''
@@ -18,7 +15,6 @@ class KnapSack:
         capacity (int): the maximum knapsack weight
 
     '''
-
     def __init__(self,
                  n_items=5,
                  capacity=20,
@@ -91,7 +87,6 @@ class evolutionaryAlgorithm:
         population_size (int): the number of individuals to generate in the initial population
         n_offsprings (int): number of offsprings to generate at each iteration of the algorithm
     '''
-
     def __init__(self,
                  population_size=200,
                  n_offsprings=100):
@@ -208,11 +203,7 @@ class evolutionaryAlgorithm:
             if iterFitness > bestFitness:
                 bestFitness = iterFitness
                 bestIndividual = indiv_copy
-
         indiv.order = bestIndividual.order
-
-
-
 
     def optimize(self,
             problem,
@@ -271,6 +262,7 @@ def heuristic(problem=KnapSack()):
     heuristic_order = sorted(range(len(order)),key=lambda k : problem.value[k]/problem.weight[k],reverse=True)
     heur_indiv = Individual(problem,0,heuristic_order)
     return heur_indiv
+
 
 if __name__=='__main__':
     kp = KnapSack(n_items=100,capacity=50)
