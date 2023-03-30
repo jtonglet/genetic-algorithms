@@ -14,4 +14,4 @@ The implemented algorithm contains several components that promote both explorat
 - cross-over and mutation operators
 - a greedy heuristic to initialize part of the population
 
-The final score was 19 on 20.
+The final score was 18 on 20.
